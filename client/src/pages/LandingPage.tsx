@@ -26,12 +26,8 @@ export default function LandingPage() {
     <div className="page">
       <header className="header">
         <div className="wrap header-inner">
-          <a className="logo" href="#top" aria-label="MRS Medical Services home">
-            <span className="logo-mark">♡</span>
-            <span>
-              <strong>MRS</strong>
-              <small>MEDICAL SERVICES</small>
-            </span>
+          <a className="logo" href="#top" aria-label="M.R.S. Medical Services home">
+            <img src="/images/mrs-logo.svg" alt="M.R.S. Medical Services" />
           </a>
 
           <nav aria-label="Primary navigation">
