@@ -21,6 +21,12 @@ const steps = [
 
 const Check = () => <span className="check" aria-hidden="true">✓</span>;
 
+const PhoneIcon = () => (
+  <svg className="phone-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7.2 3.5 9.4 7c.3.5.2 1.1-.2 1.5l-1.4 1.4a15.4 15.4 0 0 0 6.3 6.3l1.4-1.4c.4-.4 1-.5 1.5-.2l3.5 2.2c.5.3.7.9.5 1.5l-.7 2.1c-.2.7-.9 1.1-1.6 1.1C9.8 21.5 2.5 14.2 2.5 5.3c0-.7.4-1.4 1.1-1.6l2.1-.7c.6-.2 1.2 0 1.5.5Z" />
+  </svg>
+);
+
 export default function LandingPage() {
   return (
     <div className="page">
@@ -53,18 +59,15 @@ export default function LandingPage() {
 
             <div className="hero-buttons">
               <a className="btn primary" href="#contact">SCHEDULE A VISIT</a>
-              <a className="btn secondary" href="tel:+17327660266">⌕&nbsp;&nbsp; CALL NOW</a>
+              <a className="btn secondary" href="tel:+17327660266"><PhoneIcon />CALL NOW</a>
             </div>
 
             <div className="zip-box" id="area">
-              <div className="pin">⌖</div>
-              <div>
-                <strong>Need a blood draw?</strong>
-                <span>Enter your ZIP code to confirm we service your area.</span>
-                <div className="zip-row">
-                  <input placeholder="Enter ZIP code" inputMode="numeric" />
-                  <button type="button">CHECK AVAILABILITY</button>
-                </div>
+              <strong>Need a blood draw?</strong>
+              <span>Enter your ZIP code to confirm we service your area.</span>
+              <div className="zip-row">
+                <input placeholder="Enter ZIP code" inputMode="numeric" />
+                <button type="button">CHECK AVAILABILITY</button>
               </div>
             </div>
           </div>
