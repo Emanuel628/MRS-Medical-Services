@@ -1,0 +1,30 @@
+.hero-buttons .secondary {
+  gap: 9px;
+}
+
+.phone-icon {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.zip-box {
+  display: block;
+  max-width: 490px;
+  margin-left: 0;
+}
+
+.zip-box strong,
+.zip-box span {
+  display: block;
+}
+
+@media (max-width: 520px) {
+  .zip-box {
+    display: block;
+  }
+}
