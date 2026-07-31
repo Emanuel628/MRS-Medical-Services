@@ -20,11 +20,10 @@
 }
 
 .logo-image {
-  content: url('/images/mrs-logo-exact.jpg');
   display: block;
-  width: 330px;
-  height: 86px;
-  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   object-position: center;
 }
 
@@ -40,16 +39,14 @@
 }
 
 @media (max-width: 850px) {
-  .logo,
-  .logo-image {
+  .logo {
     width: 255px;
     height: 64px;
   }
 }
 
 @media (max-width: 520px) {
-  .logo,
-  .logo-image {
+  .logo {
     width: 220px;
     height: 56px;
   }
