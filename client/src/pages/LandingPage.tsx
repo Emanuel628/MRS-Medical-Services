@@ -33,7 +33,7 @@ export default function LandingPage() {
       <header className="header">
         <div className="wrap header-inner">
           <a className="logo" href="#top" aria-label="M.R.S. Medical Services home">
-            <span className="logo-image" role="img" aria-label="M.R.S. Medical Services" />
+            <img className="logo-image" src="/images/mrs-logo-exact.jpg" alt="M.R.S. Medical Services" />
           </a>
 
           <nav aria-label="Primary navigation">
@@ -52,10 +52,7 @@ export default function LandingPage() {
           <div className="hero-copy">
             <h1>Professional<br />Blood Draws</h1>
             <h2>In the Comfort of Your Home</h2>
-            <p>
-              Skip the waiting room. We travel to your home, office, or facility for safe,
-              convenient specimen collection with care you can trust.
-            </p>
+            <p>Skip the waiting room. We travel to your home, office, or facility for safe, convenient specimen collection with care you can trust.</p>
 
             <div className="hero-buttons">
               <a className="btn primary" href="#contact">SCHEDULE A VISIT</a>
@@ -75,115 +72,29 @@ export default function LandingPage() {
           <div className="hero-photo" role="img" aria-label="Mobile phlebotomist performing an in-home blood draw" />
         </section>
 
-        <section className="benefits">
-          <div className="wrap benefits-grid">
-            <article>
-              <div className="circle">⌂</div>
-              <div>
-                <strong>Convenient</strong>
-                <p>We come to you.</p>
-              </div>
-            </article>
+        <section className="benefits"><div className="wrap benefits-grid">
+          <article><div className="circle">⌂</div><div><strong>Convenient</strong><p>We come to you.</p></div></article>
+          <article><div className="circle">♢</div><div><strong>Professional</strong><p>Certified, experienced, and committed to your safety.</p></div></article>
+          <article><div className="circle">♡</div><div><strong>Comfortable</strong><p>Compassionate care in the comfort of your own space.</p></div></article>
+        </div></section>
 
-            <article>
-              <div className="circle">♢</div>
-              <div>
-                <strong>Professional</strong>
-                <p>Certified, experienced, and committed to your safety.</p>
-              </div>
-            </article>
+        <section className="services" id="services"><div className="wrap services-grid">
+          <div className="section-title"><span>SERVICES</span><h2>Blood Collection<br />Made Easy</h2><i /><p>We provide a full range of mobile phlebotomy services for individuals, families, providers, and organizations.</p></div>
+          <div className="service-column">{servicesLeft.map((service) => <div key={service}><Check />{service}</div>)}</div>
+          <div className="service-column">{servicesRight.map((service) => <div key={service}><Check />{service}</div>)}</div>
+        </div></section>
 
-            <article>
-              <div className="circle">♡</div>
-              <div>
-                <strong>Comfortable</strong>
-                <p>Compassionate care in the comfort of your own space.</p>
-              </div>
-            </article>
-          </div>
-        </section>
+        <section className="process" id="process"><div className="wrap process-grid">
+          <div className="section-title"><span>HOW IT WORKS</span><h2>Simple. Safe.<br />Convenient.</h2><i /></div>
+          <div className="steps">{steps.map(([number, title, description], index) => <article key={number}><div className="step-top"><b>{number}</b>{index < 3 && <em>→</em>}</div><strong>{title}</strong><p>{description}</p></article>)}</div>
+        </div></section>
 
-        <section className="services" id="services">
-          <div className="wrap services-grid">
-            <div className="section-title">
-              <span>SERVICES</span>
-              <h2>Blood Collection<br />Made Easy</h2>
-              <i />
-              <p>We provide a full range of mobile phlebotomy services for individuals, families, providers, and organizations.</p>
-            </div>
+        <section className="proof" id="about"><div className="wrap proof-grid">
+          <div className="credentials"><span>TRUST &amp; CREDENTIALS</span><p><Check />NHA Certified Phlebotomist</p><p><Check />CPR &amp; First Aid Certified</p><p><Check />Insured &amp; Background Checked</p><p><Check />HIPAA Compliant Practices</p><a className="btn secondary" href="#contact">LEARN MORE ABOUT US</a></div>
+          <div className="reviews"><span>WHAT OUR PATIENTS SAY</span><div className="review-grid"><blockquote><b>★★★★★</b><p>“Such a great experience! She was on time, professional, and made me feel so comfortable. Highly recommended!”</p><cite>— J. M.</cite></blockquote><blockquote><b>★★★★★</b><p>“Having someone come to my home made all the difference. Friendly, efficient, and so convenient.”</p><cite>— L. T.</cite></blockquote></div></div>
+        </div></section>
 
-            <div className="service-column">
-              {servicesLeft.map((service) => <div key={service}><Check />{service}</div>)}
-            </div>
-
-            <div className="service-column">
-              {servicesRight.map((service) => <div key={service}><Check />{service}</div>)}
-            </div>
-          </div>
-        </section>
-
-        <section className="process" id="process">
-          <div className="wrap process-grid">
-            <div className="section-title">
-              <span>HOW IT WORKS</span>
-              <h2>Simple. Safe.<br />Convenient.</h2>
-              <i />
-            </div>
-
-            <div className="steps">
-              {steps.map(([number, title, description], index) => (
-                <article key={number}>
-                  <div className="step-top">
-                    <b>{number}</b>
-                    {index < 3 && <em>→</em>}
-                  </div>
-                  <strong>{title}</strong>
-                  <p>{description}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="proof" id="about">
-          <div className="wrap proof-grid">
-            <div className="credentials">
-              <span>TRUST &amp; CREDENTIALS</span>
-              <p><Check />NHA Certified Phlebotomist</p>
-              <p><Check />CPR &amp; First Aid Certified</p>
-              <p><Check />Insured &amp; Background Checked</p>
-              <p><Check />HIPAA Compliant Practices</p>
-              <a className="btn secondary" href="#contact">LEARN MORE ABOUT US</a>
-            </div>
-
-            <div className="reviews">
-              <span>WHAT OUR PATIENTS SAY</span>
-              <div className="review-grid">
-                <blockquote>
-                  <b>★★★★★</b>
-                  <p>“Such a great experience! She was on time, professional, and made me feel so comfortable. Highly recommended!”</p>
-                  <cite>— J. M.</cite>
-                </blockquote>
-                <blockquote>
-                  <b>★★★★★</b>
-                  <p>“Having someone come to my home made all the difference. Friendly, efficient, and so convenient.”</p>
-                  <cite>— L. T.</cite>
-                </blockquote>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="cta" id="contact">
-          <div className="wrap cta-inner">
-            <div className="calendar">▣</div>
-            <div>
-              <h3>Ready to Schedule?</h3>
-              <p>We’re here to make your blood draw simple and stress-free.</p>
-            </div>
-            <a className="btn teal" href="mailto:contact@mrsmedicalservices.com">SCHEDULE YOUR VISIT</a>
-          </div>
-        </section>
+        <section className="cta" id="contact"><div className="wrap cta-inner"><div className="calendar">▣</div><div><h3>Ready to Schedule?</h3><p>We’re here to make your blood draw simple and stress-free.</p></div><a className="btn teal" href="mailto:contact@mrsmedicalservices.com">SCHEDULE YOUR VISIT</a></div></section>
       </main>
     </div>
   );
