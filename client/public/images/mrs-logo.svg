@@ -1,14 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 220" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 330" role="img" aria-labelledby="title desc">
   <title id="title">M.R.S. Medical Services</title>
-  <desc id="desc">Blue heart-shaped medical mark with a red blood drop and navy company lettering.</desc>
-  <g fill="none" stroke="#17658d" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M92 184C25 129 32 36 104 29c35-4 58 16 73 42 16-26 39-46 74-42 72 7 79 100 12 155-28 23-58 40-86 57-28-17-58-34-85-57Z" stroke-width="15"/>
-    <path d="M112 178C58 130 60 62 112 47c28-8 49 7 65 31 16-24 37-39 65-31 52 15 54 83 0 131-21 19-43 33-65 47-22-14-44-28-65-47Z" stroke-width="7"/>
+  <desc id="desc">Teal heart-shaped medical mark with a red blood drop and navy M.R.S. Medical Services lettering.</desc>
+  <defs>
+    <linearGradient id="tealStroke" x1="70" y1="30" x2="350" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b5575"/>
+      <stop offset=".52" stop-color="#1b7896"/>
+      <stop offset="1" stop-color="#0d5c7b"/>
+    </linearGradient>
+    <linearGradient id="dropFill" x1="210" y1="102" x2="210" y2="231" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d7193f"/>
+      <stop offset="1" stop-color="#b0072d"/>
+    </linearGradient>
+    <filter id="softShadow" x="-8%" y="-8%" width="116%" height="116%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.2" flood-color="#08324a" flood-opacity=".14"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <path d="M126 245C57 174 61 76 139 49c42-14 82 1 112 39 32-38 74-53 117-35 75 31 76 130 9 198-39 40-83 66-127 91-45-26-87-55-124-97Z"
+      fill="none" stroke="url(#tealStroke)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M161 231C107 172 105 95 161 69c31-14 62 0 90 37 28-35 60-48 91-35 52 22 58 96 15 151"
+      fill="none" stroke="#176d8c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M84 231c53 45 122 51 213 11 35-16 70-38 104-65"
+      fill="none" stroke="#166b89" stroke-width="12" stroke-linecap="round"/>
+    <path d="M161 288c54-17 111-49 166-93"
+      fill="none" stroke="#166b89" stroke-width="12" stroke-linecap="round" stroke-dasharray="38 20"/>
+    <path d="M216 102c-21 34-47 67-47 105 0 31 20 51 47 51s47-20 47-51c0-38-26-71-47-105Z"
+      fill="url(#dropFill)"/>
+    <path d="M227 179c17 35 3 59-22 70 12-22 15-43 8-69-4-15-9-29-15-44 13 13 22 27 29 43Z"
+      fill="#ffffff" opacity=".86"/>
   </g>
-  <path d="M177 74c-15 25-34 48-34 76 0 24 15 42 34 42s34-18 34-42c0-28-19-51-34-76Z" fill="#b5122f"/>
-  <path d="M177 96c-8 16-19 33-19 51 0 13 8 24 19 24s19-11 19-24c0-18-11-35-19-51Z" fill="#fff" opacity=".42"/>
-  <g fill="#0a3154">
-    <text x="305" y="114" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="800" letter-spacing="4">M.R.S.</text>
-    <text x="309" y="166" font-family="Arial, Helvetica, sans-serif" font-size="37" font-weight="700" letter-spacing="2">MEDICAL SERVICES</text>
+
+  <g fill="#0a3154" filter="url(#softShadow)">
+    <text x="455" y="158" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="124" font-weight="900" letter-spacing="2">M.R.S.</text>
+    <text x="458" y="225" font-family="Arial, Helvetica, sans-serif" font-size="47" font-weight="800" letter-spacing="2.5">MEDICAL SERVICES</text>
   </g>
 </svg>
