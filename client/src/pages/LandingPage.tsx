@@ -33,7 +33,7 @@ export default function LandingPage() {
       <header className="header">
         <div className="wrap header-inner">
           <a className="logo" href="#top" aria-label="M.R.S. Medical Services home">
-            <img src="/images/mrs-logo.svg" alt="M.R.S. Medical Services" />
+            <img src="/images/mrs-logo-exact.jpg" alt="M.R.S. Medical Services" />
           </a>
 
           <nav aria-label="Primary navigation">
