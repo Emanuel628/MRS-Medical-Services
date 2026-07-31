@@ -1,38 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 330" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 260" role="img" aria-labelledby="title desc">
   <title id="title">M.R.S. Medical Services</title>
-  <desc id="desc">Teal heart-shaped medical mark with a red blood drop and navy M.R.S. Medical Services lettering.</desc>
+  <desc id="desc">M.R.S. Medical Services logo with a teal heart, blood drop, and phlebotomy needle.</desc>
   <defs>
-    <linearGradient id="tealStroke" x1="70" y1="30" x2="350" y2="300" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0b5575"/>
-      <stop offset=".52" stop-color="#1b7896"/>
-      <stop offset="1" stop-color="#0d5c7b"/>
+    <linearGradient id="heartGradient" x1="64" y1="30" x2="236" y2="218" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#128f8b"/>
+      <stop offset="1" stop-color="#0d7774"/>
     </linearGradient>
-    <linearGradient id="dropFill" x1="210" y1="102" x2="210" y2="231" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#d7193f"/>
-      <stop offset="1" stop-color="#b0072d"/>
+    <linearGradient id="dropGradient" x1="151" y1="79" x2="151" y2="171" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c4163a"/>
+      <stop offset="1" stop-color="#9f102e"/>
     </linearGradient>
-    <filter id="softShadow" x="-8%" y="-8%" width="116%" height="116%">
-      <feDropShadow dx="0" dy="3" stdDeviation="2.2" flood-color="#08324a" flood-opacity=".14"/>
-    </filter>
   </defs>
 
-  <g filter="url(#softShadow)">
-    <path d="M126 245C57 174 61 76 139 49c42-14 82 1 112 39 32-38 74-53 117-35 75 31 76 130 9 198-39 40-83 66-127 91-45-26-87-55-124-97Z"
-      fill="none" stroke="url(#tealStroke)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M161 231C107 172 105 95 161 69c31-14 62 0 90 37 28-35 60-48 91-35 52 22 58 96 15 151"
-      fill="none" stroke="#176d8c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M84 231c53 45 122 51 213 11 35-16 70-38 104-65"
-      fill="none" stroke="#166b89" stroke-width="12" stroke-linecap="round"/>
-    <path d="M161 288c54-17 111-49 166-93"
-      fill="none" stroke="#166b89" stroke-width="12" stroke-linecap="round" stroke-dasharray="38 20"/>
-    <path d="M216 102c-21 34-47 67-47 105 0 31 20 51 47 51s47-20 47-51c0-38-26-71-47-105Z"
-      fill="url(#dropFill)"/>
-    <path d="M227 179c17 35 3 59-22 70 12-22 15-43 8-69-4-15-9-29-15-44 13 13 22 27 29 43Z"
-      fill="#ffffff" opacity=".86"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M151 218C93 181 46 141 46 91c0-33 25-58 58-58 22 0 39 10 51 29 12-19 30-29 52-29 33 0 58 25 58 58 0 50-48 91-114 127Z"
+      stroke="url(#heartGradient)" stroke-width="14"/>
+    <path d="M151 196C105 165 71 133 71 94c0-22 16-38 38-38 18 0 32 11 42 31 10-20 24-31 42-31 22 0 38 16 38 38 0 39-34 71-80 102Z"
+      stroke="#eef6f8" stroke-width="9"/>
+    <path d="M85 200 247 70" stroke="#0b2945" stroke-width="8"/>
+    <path d="M224 88 254 64" stroke="#128f8b" stroke-width="14"/>
+    <path d="M78 206 55 224" stroke="#128f8b" stroke-width="14"/>
+    <path d="M55 224 43 238" stroke="#0b2945" stroke-width="5"/>
   </g>
 
-  <g fill="#0a3154" filter="url(#softShadow)">
-    <text x="455" y="158" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="124" font-weight="900" letter-spacing="2">M.R.S.</text>
-    <text x="458" y="225" font-family="Arial, Helvetica, sans-serif" font-size="47" font-weight="800" letter-spacing="2.5">MEDICAL SERVICES</text>
+  <path d="M151 76c-19 31-39 57-39 86 0 27 17 45 39 45s39-18 39-45c0-29-20-55-39-86Z"
+    fill="url(#dropGradient)"/>
+  <path d="M162 143c11 25 2 43-19 53 8-16 10-31 5-48-3-10-7-21-12-32 12 8 20 17 26 27Z"
+    fill="#ffffff" opacity=".82"/>
+
+  <g fill="#0b2945">
+    <text x="318" y="128" font-family="Arial, Helvetica, sans-serif" font-size="94" font-weight="800" letter-spacing="3">M.R.S.</text>
+    <text x="322" y="184" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700" letter-spacing="2.8">MEDICAL SERVICES</text>
   </g>
 </svg>

@@ -14,7 +14,7 @@
 
 .logo {
   display: block;
-  width: 390px;
+  width: 360px;
   height: 86px;
   overflow: hidden;
 }
@@ -40,14 +40,14 @@
 
 @media (max-width: 850px) {
   .logo {
-    width: 290px;
+    width: 280px;
     height: 64px;
   }
 }
 
 @media (max-width: 520px) {
   .logo {
-    width: 245px;
+    width: 240px;
     height: 56px;
   }
 
