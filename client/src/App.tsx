@@ -111,7 +111,7 @@ function Header({ activePage, onNavigate }: { activePage: PageKey; onNavigate: (
             onNavigate('home');
           }}
         >
-          <img src="/images/mrs-logo.svg" alt="M.R.S. Medical Services" />
+          <img src="/images/mrs-logo.png" alt="M.R.S. Medical Services" />
         </a>
 
         <nav aria-label="Primary navigation">
