@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
-type PageKey = 'home' | 'services' | 'about' | 'contact';
+type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'register';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
   { key: 'services', label: 'Services', path: '/services' },
+  { key: 'intake', label: 'Intake', path: '/intake' },
   { key: 'about', label: 'About', path: '/about' },
   { key: 'contact', label: 'Contact', path: '/contact' },
+  { key: 'register', label: 'Register', path: '/register' },
 ];
 
 const serviceItems = [
@@ -20,6 +22,15 @@ const serviceItems = [
 
 const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
 
+type PatientProfile = {
+  fullName: string;
+  dateOfBirth: string;
+  phone: string;
+  email: string;
+  address: string;
+  preferredLab: string;
+};
+
 const steps = [
   ['1', 'Request a visit', 'Share the basic details and location so the visit can be reviewed.'],
   ['2', 'Confirm the order', 'Have the required lab order, kit, or collection instructions ready.'],
@@ -29,8 +40,10 @@ const steps = [
 
 function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/services')) return 'services';
+  if (pathname.startsWith('/intake')) return 'intake';
   if (pathname.startsWith('/about')) return 'about';
   if (pathname.startsWith('/contact')) return 'contact';
+  if (pathname.startsWith('/register')) return 'register';
   return 'home';
 }
 
@@ -105,7 +118,6 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     <main id="top">
       <section className="hero">
         <div className="hero-copy">
-          <span className="eyebrow">Mobile phlebotomy</span>
           <h1>Professional blood draws in the comfort of your space.</h1>
           <p>
             M.R.S. Medical Services provides mobile specimen collection for people who need a
@@ -174,7 +186,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   return (
     <main>
-      <PageHero eyebrow="Services" title="Mobile blood collection made simple.">
+      <PageHero title="Mobile blood collection made simple.">
         <p>
           The services below are the core collection categories visitors commonly need. Final
           eligibility, service area, timing, and order requirements should be confirmed before a
@@ -258,7 +270,7 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   return (
     <main>
-      <PageHero eyebrow="About" title="Personal, professional mobile collection.">
+      <PageHero title="Personal, professional mobile collection.">
         <p>
           M.R.S. Medical Services is built around a simple idea: make specimen collection easier for
           people who need convenient access outside a traditional waiting room.
@@ -338,7 +350,7 @@ function ContactPage() {
 
   return (
     <main>
-      <PageHero eyebrow="Contact" title="Send a message about your visit.">
+      <PageHero title="Send a message about your visit.">
         <p>
           Share the basic details and M.R.S. Medical Services can follow up about service area,
           scheduling, and what paperwork or instructions are needed.
@@ -413,11 +425,365 @@ function ContactPage() {
   );
 }
 
-function PageHero({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
+function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const [form, setForm] = useState({
+    fullName: '',
+    dateOfBirth: '',
+    phone: '',
+    email: '',
+    address: '',
+    preferredLab: '',
+    requestedDate: '',
+    prescriptionReady: false,
+    hasKit: false,
+    createAccount: false,
+    notes: '',
+  });
+  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('sending');
+    setStatusMessage('Sending your intake form...');
+
+    const message = [
+      'Patient intake request',
+      '',
+      `Patient name: ${form.fullName}`,
+      `Date of birth: ${form.dateOfBirth}`,
+      `Phone: ${form.phone}`,
+      `Email: ${form.email || 'Not provided'}`,
+      `Address: ${form.address}`,
+      `Preferred lab: ${form.preferredLab || 'Not specified'}`,
+      `Requested date: ${form.requestedDate || 'Not specified'}`,
+      `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
+      `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
+      `Interested in account: ${form.createAccount ? 'Yes' : 'No'}`,
+      '',
+      'Notes:',
+      form.notes || 'None',
+    ].join('\n');
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.fullName,
+          phone: form.phone,
+          email: form.email,
+          message,
+        }),
+      });
+
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Intake form could not be sent right now.');
+      }
+
+      if (form.createAccount) {
+        savePatientProfile({
+          fullName: form.fullName,
+          dateOfBirth: form.dateOfBirth,
+          phone: form.phone,
+          email: form.email,
+          address: form.address,
+          preferredLab: form.preferredLab,
+        });
+      }
+
+      setStatus('success');
+      setStatusMessage(
+        form.createAccount
+          ? 'Your intake form was sent and your profile was saved on this device.'
+          : 'Your intake form was sent. M.R.S. Medical Services will follow up soon.',
+      );
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Intake form could not be sent right now.');
+    }
+  };
+
+  return (
+    <main>
+      <PageHero title="Patient intake form.">
+        <p>
+          Complete this form before requesting a visit. Creating an account is optional and is not
+          required to book services.
+        </p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap form-layout">
+          <form className="contact-form intake-form" onSubmit={handleSubmit}>
+            <div className="form-grid">
+              <label>
+                Full name
+                <input
+                  value={form.fullName}
+                  onChange={(event) => setForm({ ...form, fullName: event.target.value })}
+                  autoComplete="name"
+                  required
+                />
+              </label>
+              <label>
+                Date of birth
+                <input
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={(event) => setForm({ ...form, dateOfBirth: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={form.phone}
+                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                  autoComplete="tel"
+                  required
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                  autoComplete="email"
+                />
+              </label>
+            </div>
+
+            <label>
+              Service address
+              <input
+                value={form.address}
+                onChange={(event) => setForm({ ...form, address: event.target.value })}
+                autoComplete="street-address"
+                required
+              />
+            </label>
+
+            <div className="form-grid">
+              <label>
+                Preferred lab
+                <select
+                  value={form.preferredLab}
+                  onChange={(event) => setForm({ ...form, preferredLab: event.target.value })}
+                >
+                  <option value="">Select if known</option>
+                  {labOptions.map((lab) => (
+                    <option key={lab} value={lab}>{lab}</option>
+                  ))}
+                  <option value="Other">Other / not sure</option>
+                </select>
+              </label>
+              <label>
+                Preferred visit date
+                <input
+                  type="date"
+                  value={form.requestedDate}
+                  onChange={(event) => setForm({ ...form, requestedDate: event.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="checkbox-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.prescriptionReady}
+                  onChange={(event) => setForm({ ...form, prescriptionReady: event.target.checked })}
+                />
+                I have a prescription, lab order, or provider instructions.
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.hasKit}
+                  onChange={(event) => setForm({ ...form, hasKit: event.target.checked })}
+                />
+                I have a specialty collection kit.
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.createAccount}
+                  onChange={(event) => setForm({ ...form, createAccount: event.target.checked })}
+                />
+                Save this information for future visits on this device.
+              </label>
+            </div>
+
+            <label>
+              Notes
+              <textarea
+                rows={5}
+                value={form.notes}
+                onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                placeholder="Add kit details, access instructions, timing needs, or other notes."
+              />
+            </label>
+
+            <button className="btn primary" type="submit" disabled={status === 'sending'}>
+              {status === 'sending' ? 'Sending...' : 'Submit Intake'}
+            </button>
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+          </form>
+
+          <aside className="contact-card">
+            <h2>Before you submit</h2>
+            <p>All blood draws require a prescription, lab order, or kit instructions.</p>
+            <p>Normal draws are $80. Additional kits or different provider orders are $20 each.</p>
+            <p>Account creation is optional. You can book services without creating one.</p>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function RegisterPage() {
+  const [profile, setProfile] = useState<PatientProfile>(() => loadPatientProfile());
+  const [saved, setSaved] = useState(false);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    savePatientProfile(profile);
+    setSaved(true);
+  };
+
+  return (
+    <main>
+      <PageHero title="Register for repeat visits.">
+        <p>
+          Create an optional profile for repeat visits. This does not replace the intake form and is
+          not required to request service.
+        </p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap form-layout">
+          <form className="contact-form" onSubmit={handleSubmit}>
+            <label>
+              Full name
+              <input
+                value={profile.fullName}
+                onChange={(event) => setProfile({ ...profile, fullName: event.target.value })}
+                autoComplete="name"
+                required
+              />
+            </label>
+            <label>
+              Date of birth
+              <input
+                type="date"
+                value={profile.dateOfBirth}
+                onChange={(event) => setProfile({ ...profile, dateOfBirth: event.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Phone
+              <input
+                value={profile.phone}
+                onChange={(event) => setProfile({ ...profile, phone: event.target.value })}
+                autoComplete="tel"
+                required
+              />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={profile.email}
+                onChange={(event) => setProfile({ ...profile, email: event.target.value })}
+                autoComplete="email"
+              />
+            </label>
+            <label>
+              Service address
+              <input
+                value={profile.address}
+                onChange={(event) => setProfile({ ...profile, address: event.target.value })}
+                autoComplete="street-address"
+              />
+            </label>
+            <label>
+              Preferred lab
+              <select
+                value={profile.preferredLab}
+                onChange={(event) => setProfile({ ...profile, preferredLab: event.target.value })}
+              >
+                <option value="">Select if known</option>
+                {labOptions.map((lab) => (
+                  <option key={lab} value={lab}>{lab}</option>
+                ))}
+                <option value="Other">Other / not sure</option>
+              </select>
+            </label>
+            <button className="btn primary" type="submit">Save Profile</button>
+            {saved && <p className="form-status" role="status">Your profile was saved on this device.</p>}
+          </form>
+
+          <aside className="contact-card">
+            <h2>Saved patient info</h2>
+            {profile.fullName || profile.phone || profile.email ? (
+              <dl className="profile-summary">
+                <div><dt>Name</dt><dd>{profile.fullName || 'Not saved'}</dd></div>
+                <div><dt>Date of birth</dt><dd>{profile.dateOfBirth || 'Not saved'}</dd></div>
+                <div><dt>Phone</dt><dd>{profile.phone || 'Not saved'}</dd></div>
+                <div><dt>Email</dt><dd>{profile.email || 'Not saved'}</dd></div>
+                <div><dt>Address</dt><dd>{profile.address || 'Not saved'}</dd></div>
+                <div><dt>Preferred lab</dt><dd>{profile.preferredLab || 'Not saved'}</dd></div>
+              </dl>
+            ) : (
+              <p>No profile is saved on this device yet.</p>
+            )}
+            <p>
+              This profile is stored in this browser for convenience. A full secure account portal
+              can be added later with login, database storage, and privacy controls.
+            </p>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function loadPatientProfile(): PatientProfile {
+  const blankProfile = {
+    fullName: '',
+    dateOfBirth: '',
+    phone: '',
+    email: '',
+    address: '',
+    preferredLab: '',
+  };
+
+  try {
+    const savedProfile = window.localStorage.getItem('mrsPatientProfile');
+    return savedProfile ? { ...blankProfile, ...JSON.parse(savedProfile) } : blankProfile;
+  } catch {
+    return blankProfile;
+  }
+}
+
+function savePatientProfile(profile: PatientProfile) {
+  window.localStorage.setItem('mrsPatientProfile', JSON.stringify(profile));
+}
+
+function PageHero({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="page-hero">
       <div className="wrap">
-        <span className="eyebrow">{eyebrow}</span>
         <h1>{title}</h1>
         {children}
       </div>
@@ -447,8 +813,10 @@ export default function App() {
       <Header activePage={activePage} onNavigate={navigate} />
       {activePage === 'home' && <HomePage onNavigate={navigate} />}
       {activePage === 'services' && <ServicesPage onNavigate={navigate} />}
+      {activePage === 'intake' && <IntakePage onNavigate={navigate} />}
       {activePage === 'about' && <AboutPage onNavigate={navigate} />}
       {activePage === 'contact' && <ContactPage />}
+      {activePage === 'register' && <RegisterPage />}
       <Footer onNavigate={navigate} />
     </div>
   );
