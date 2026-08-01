@@ -622,6 +622,11 @@ a {
   accent-color: var(--teal-dark);
 }
 
+.contact-form .checkbox-field a {
+  color: var(--teal-dark);
+  font-weight: 800;
+}
+
 .auth-checkbox {
   margin-top: -6px;
 }
@@ -698,6 +703,21 @@ a {
   border-color: #b70f1e;
   background: #fff8f8;
   box-shadow: 0 0 0 3px rgba(183, 15, 30, .08);
+}
+
+.zip-subfield {
+  grid-column: 1;
+}
+
+.terms-acknowledgement {
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: #f8fcfd;
+}
+
+.terms-acknowledgement.field-invalid {
+  border-color: #b70f1e;
+  background: #fff8f8;
 }
 
 .checkbox-group {
@@ -1484,6 +1504,32 @@ a {
   margin: 6px 0 0;
   color: var(--text);
   font-size: 13px;
+}
+
+.legal-content {
+  max-width: 860px;
+}
+
+.legal-content h2 {
+  margin: 28px 0 10px;
+  color: var(--navy-deep);
+  font: 700 25px / 1.15 Georgia, 'Times New Roman', serif;
+}
+
+.legal-content h2:first-child {
+  margin-top: 0;
+}
+
+.legal-content p {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+@media (min-width: 901px) {
+  .desktop-hidden-cta {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {

@@ -35,6 +35,7 @@ type ContactRequest = {
   insuranceMemberId?: string;
   insuranceGroupNumber?: string;
   policyholderName?: string;
+  termsAccepted?: boolean;
 };
 
 type SavedContactRequest = {
@@ -466,8 +467,42 @@ async function updatePaymentStatus(id: string, paymentStatus: string, checkoutSe
   );
 }
 
-async function sendIntakeReceivedEmail(row: CancellationRow, hasKit: boolean) {
+function formatMoneyFromCents(value: number | null | undefined) {
+  if (!value) return '';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value / 100);
+}
+
+async function sendIntakeReceivedEmail(
+  row: CancellationRow,
+  hasKit: boolean,
+  payment?: { paid: boolean; amountCents?: number | null; transactionId?: string | null; receiptUrl?: string | null },
+) {
   if (!row.email) return;
+
+  const cancelUrl = row.cancelToken ? `${getConfiguredSiteOrigin()}/cancel?token=${row.cancelToken}` : '';
+  const appointmentLabel = getAppointmentLabel(row.preferredDate, row.preferredTimeWindow);
+  if (payment?.paid) {
+    await sendEmail({
+      to: row.email,
+      subject: 'M.R.S. Medical Services appointment confirmed',
+      title: 'Appointment confirmed',
+      paragraphs: [
+        `Hi ${row.fullName},`,
+        `M.R.S. Medical Services has confirmed your appointment for ${appointmentLabel}.`,
+        `Receipt: ${formatMoneyFromCents(payment.amountCents) || 'Paid'} by secure card checkout.`,
+        `Transaction number: ${payment.transactionId || 'Provided by Stripe checkout'}.`,
+        'Appointments must be canceled at least 24 hours in advance.',
+        ...(cancelUrl ? [`Cancellation link: ${cancelUrl}`] : []),
+        ...(payment.receiptUrl ? [`Stripe receipt: ${payment.receiptUrl}`] : []),
+        ...(hasKit ? [kitScheduleNote] : []),
+      ],
+      actions: cancelUrl ? [{ label: 'Cancel appointment', url: cancelUrl }] : [],
+    });
+    return;
+  }
 
   await sendEmail({
     to: row.email,
@@ -475,12 +510,13 @@ async function sendIntakeReceivedEmail(row: CancellationRow, hasKit: boolean) {
     title: 'Visit request received',
     paragraphs: [
       `Hi ${row.fullName},`,
-      `Thank you for requesting an appointment with M.R.S. Medical Services. We received your request for ${getAppointmentLabel(row.preferredDate, row.preferredTimeWindow)}.`,
+      `Thank you for requesting an appointment with M.R.S. Medical Services. We received your request for ${appointmentLabel}.`,
       'This is not a confirmed appointment yet. M.R.S. Medical Services will review the request and contact you to confirm the appointment.',
       'Appointments must be canceled at least 24 hours in advance.',
+      ...(cancelUrl ? [`Cancellation link: ${cancelUrl}`] : []),
       ...(hasKit ? [kitScheduleNote] : []),
     ],
-    actions: row.cancelToken ? [{ label: 'Cancel appointment request', url: `${getConfiguredSiteOrigin()}/cancel?token=${row.cancelToken}` }] : [],
+    actions: cancelUrl ? [{ label: 'Cancel appointment request', url: cancelUrl }] : [],
   });
 }
 
@@ -626,6 +662,11 @@ router.post('/', async (request, response) => {
     }
   }
 
+  if (requestType === 'intake' && body.termsAccepted !== true) {
+    response.status(400).json({ message: 'Terms & Conditions and Privacy Policy acknowledgement is required.' });
+    return;
+  }
+
   if (!resend && !hasDatabaseUrl()) {
     response.status(500).json({ message: 'Contact form is not configured.' });
     return;
@@ -728,19 +769,32 @@ router.post('/payment-success', async (request, response) => {
   }
 
   try {
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['payment_intent.latest_charge'],
+    });
     if (session.payment_status !== 'paid' || !session.client_reference_id) {
       response.status(409).json({ message: 'Payment has not been completed yet.' });
       return;
     }
+
+    const paymentIntent = session.payment_intent;
+    const paymentIntentId = typeof paymentIntent === 'string' ? paymentIntent : paymentIntent?.id || null;
+    const latestCharge = typeof paymentIntent === 'object' && paymentIntent && 'latest_charge' in paymentIntent
+      ? paymentIntent.latest_charge
+      : null;
+    const receiptUrl = typeof latestCharge === 'object' && latestCharge && 'receipt_url' in latestCharge
+      ? latestCharge.receipt_url || null
+      : null;
 
     await ensureDatabase();
     const result = await pool.query<CancellationRow>(
       `UPDATE contact_requests
        SET payment_status = 'paid',
          stripe_checkout_session_id = $2,
+         status = 'mrsms_confirmed',
+         mrsms_confirmed_at = COALESCE(mrsms_confirmed_at, NOW()),
          updated_at = NOW()
-       WHERE id = $1 AND payment_status <> 'paid'
+       WHERE id = $1
        RETURNING
          full_name AS "fullName",
          email,
@@ -753,7 +807,12 @@ router.post('/payment-success', async (request, response) => {
     );
     const row = result.rows[0];
     if (row && resend) {
-      await sendIntakeReceivedEmail(row, false);
+      await sendIntakeReceivedEmail(row, false, {
+        paid: true,
+        amountCents: session.amount_total,
+        transactionId: paymentIntentId || session.id,
+        receiptUrl,
+      });
     }
     response.json({ message: 'Payment confirmed.' });
   } catch (error) {

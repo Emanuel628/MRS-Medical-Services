@@ -15,7 +15,9 @@ type PageKey =
   | 'cancel'
   | 'confirm'
   | 'appointmentReview'
-  | 'accessibility';
+  | 'accessibility'
+  | 'privacy'
+  | 'terms';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
@@ -121,9 +123,10 @@ type DateParts = {
 
 const steps = [
   ['1', 'Request a visit', 'Share your location, preferred timing, and collection needs.'],
-  ['2', 'Confirm the details', 'M.R.S. reviews the request, route timing, and required paperwork.'],
-  ['3', 'Collection visit', 'A mobile phlebotomy visit is completed at the approved location.'],
-  ['4', 'Specimen handoff', 'Specimens are handled according to the lab order or provider request.'],
+  ['2', 'Confirm the details', 'Review the requested visit details before payment or pay-at-site selection.'],
+  ['3', 'Secure checkout', 'Card-paying patients complete Stripe checkout to confirm the appointment automatically.'],
+  ['4', 'Collection visit', 'A mobile phlebotomy visit is completed at the approved location.'],
+  ['5', 'Specimen handoff', 'Specimens are handled according to the lab order or provider request.'],
 ];
 
 const benefitItems = [
@@ -151,7 +154,7 @@ const reviews = [
 ];
 
 const appointmentConfirmationNote =
-  'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. Appointments must be canceled at least 24 hours in advance.';
+  'Card-paid appointments are confirmed after successful checkout. Pay-at-site requests may be reviewed by M.R.S. Medical Services before the visit. Appointments must be canceled at least 24 hours in advance.';
 const adminSessionTokenKey = 'mrsAdminToken';
 const adminSessionExpiryKey = 'mrsAdminTokenExpiresAt';
 const inactivityLimitMs = 15 * 60 * 1000;
@@ -253,6 +256,8 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/confirm')) return 'confirm';
   if (pathname.startsWith('/appointment-review')) return 'appointmentReview';
   if (pathname.startsWith('/accessibility')) return 'accessibility';
+  if (pathname.startsWith('/privacy')) return 'privacy';
+  if (pathname.startsWith('/terms')) return 'terms';
   return 'home';
 }
 
@@ -323,6 +328,26 @@ function Footer({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="footer-links">
           <a
             className="admin-link"
+            href="/terms"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('terms');
+            }}
+          >
+            Terms
+          </a>
+          <a
+            className="admin-link"
+            href="/privacy"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('privacy');
+            }}
+          >
+            Privacy
+          </a>
+          <a
+            className="admin-link"
             href="/accessibility"
             onClick={(event) => {
               event.preventDefault();
@@ -362,7 +387,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
               <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
                 Request a Visit
               </button>
-              <a className="btn secondary" href="tel:+19084637457">Call Now</a>
+              <a className="btn secondary desktop-hidden-cta" href="tel:+19084637457">Call Now</a>
             </div>
             <p className="service-area-line">
               Serving {publicServiceAreas.join(', ')}.
@@ -781,6 +806,7 @@ function IntakePage() {
     insuranceMemberId: '',
     insuranceGroupNumber: '',
     policyholderName: '',
+    termsAccepted: false,
     notes: '',
   });
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
@@ -806,6 +832,7 @@ function IntakePage() {
   const missingTime = attemptedSubmit && !form.preferredTimeWindow;
   const missingInsurance = attemptedSubmit && form.paymentMethod === 'insurance' &&
     (!form.insuranceProvider || !form.insuranceMemberId || !form.policyholderName);
+  const missingTerms = attemptedSubmit && !form.termsAccepted;
   const unavailableByDate = blockedTimes.reduce<Record<string, Set<string>>>((availability, blocked) => {
     const key = getScheduleDateKey(blocked.blockDate);
     availability[key] = availability[key] || new Set<string>();
@@ -902,6 +929,7 @@ function IntakePage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setAttemptedSubmit(true);
 
     if (!form.requestedDate || !form.preferredTimeWindow) {
       setStatus('error');
@@ -934,6 +962,12 @@ function IntakePage() {
       return;
     }
 
+    if (!form.termsAccepted) {
+      setStatus('error');
+      setStatusMessage('Please agree to the Terms & Conditions and Privacy Policy before continuing.');
+      return;
+    }
+
     setStatus('sending');
     setStatusMessage(form.paymentMethod === 'card' ? 'Preparing secure checkout...' : 'Sending your intake form...');
 
@@ -956,6 +990,7 @@ function IntakePage() {
       `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
       `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
       `Payment method: ${form.paymentMethod === 'insurance' ? 'Insurance' : form.paymentMethod === 'pay_at_site' ? 'Pay at site' : 'Card checkout'}`,
+      `Terms accepted: ${form.termsAccepted ? 'Yes' : 'No'}`,
       ...(form.paymentMethod === 'insurance'
         ? [
             `Insurance provider: ${form.insuranceProvider}`,
@@ -996,6 +1031,7 @@ function IntakePage() {
           insuranceMemberId: form.insuranceMemberId,
           insuranceGroupNumber: form.insuranceGroupNumber,
           policyholderName: form.policyholderName,
+          termsAccepted: form.termsAccepted,
           notes: form.notes,
         }),
       });
@@ -1175,6 +1211,18 @@ function IntakePage() {
                   required
                 />
               </label>
+              <label className="zip-subfield">
+                Number of people
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={form.patientCount}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => setForm({ ...form, patientCount: Math.max(1, Number(event.target.value) || 1) })}
+                  required
+                />
+              </label>
               <label>
                 Preferred lab
                 <select
@@ -1208,18 +1256,6 @@ function IntakePage() {
                 I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
               </label>
             </div>
-
-            <label>
-              Number of people
-              <input
-                type="number"
-                min={1}
-                max={12}
-                value={form.patientCount}
-                onChange={(event) => setForm({ ...form, patientCount: Math.max(1, Number(event.target.value) || 1) })}
-                required
-              />
-            </label>
 
             <fieldset className="payment-methods">
               <legend>Payment method</legend>
@@ -1264,9 +1300,23 @@ function IntakePage() {
                 )}
               </div>
               {form.paymentMethod === 'pay_at_site' && (
-                <p className="payment-warning">Checks are not accepted. Venmo or Square payment is accepted at the visit.</p>
+                <p className="payment-warning">Checks and Venmo are not accepted. On-site payment is processed through Square only.</p>
               )}
             </fieldset>
+
+            <label className={`checkbox-field terms-acknowledgement ${missingTerms ? 'field-invalid' : ''}`}>
+              <input
+                type="checkbox"
+                checked={form.termsAccepted}
+                onChange={(event) => setForm({ ...form, termsAccepted: event.target.checked })}
+                required
+              />
+              <span>
+                I agree to the <a href="/terms">Terms &amp; Conditions</a> and{' '}
+                <a href="/privacy">Privacy Policy</a>, and authorize M.R.S. Medical Services to use my submitted
+                information to process this visit request and payment.
+              </span>
+            </label>
 
             {form.paymentMethod === 'insurance' && (
               <div className={`form-grid insurance-fields ${missingInsurance ? 'field-invalid' : ''}`}>
@@ -1786,6 +1836,126 @@ function AccessibilityPage() {
             If you have trouble using any part of the website or need help requesting a visit,
             please call <a href="tel:+19084637457">(908) 463-7457</a> or email{' '}
             <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a>.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function TermsPage() {
+  return (
+    <main>
+      <PageHero title="Terms & Conditions.">
+        <p>
+          These terms apply to use of the M.R.S. Medical Services website and mobile phlebotomy visit requests.
+        </p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap content-block legal-content">
+          <h2>Service scope</h2>
+          <p>
+            M.R.S. Medical Services provides mobile specimen collection support. The website is not for
+            emergencies, urgent medical advice, diagnosis, or treatment decisions. Call 911 or seek emergency
+            care for urgent health concerns.
+          </p>
+          <p>
+            Patients are responsible for having any required lab order, prescription, kit, provider instruction,
+            identification, and accurate visit information available at the appointment.
+          </p>
+
+          <h2>Scheduling and payment</h2>
+          <p>
+            Card-paid appointments are confirmed after successful checkout. For pay-at-site visits, payment is
+            processed through Square at the visit. Checks and Venmo are not accepted.
+          </p>
+          <p>
+            Pricing is calculated from submitted appointment details, including service address, requested time,
+            date, and number of patients. Some requests may require direct review if the location or visit details
+            are outside the standard service rules.
+          </p>
+
+          <h2>Cancellation</h2>
+          <p>
+            Appointments must be canceled at least 24 hours in advance. The confirmation email includes a
+            cancellation link when online cancellation is available.
+          </p>
+
+          <h2>Website use</h2>
+          <p>
+            Users agree to submit accurate information, avoid misuse of the website, and avoid attempting to
+            access systems, records, or accounts without authorization.
+          </p>
+
+          <h2>Privacy</h2>
+          <p>
+            Information submitted through this website is handled according to the Privacy Policy. Payment card
+            details are processed by Stripe for online checkout and are not stored directly by this website.
+          </p>
+
+          <h2>Contact</h2>
+          <p>
+            Questions about these terms can be sent to{' '}
+            <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a> or handled by calling{' '}
+            <a href="tel:+19084637457">(908) 463-7457</a>.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function PrivacyPage() {
+  return (
+    <main>
+      <PageHero title="Privacy Policy.">
+        <p>
+          This policy explains how M.R.S. Medical Services collects and uses information submitted through this website.
+        </p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap content-block legal-content">
+          <h2>Information collected</h2>
+          <p>
+            The website may collect name, date of birth, phone number, email address, service address, requested
+            appointment details, lab preference, prescription or kit status, number of patients, notes, payment
+            method, and related visit information.
+          </p>
+
+          <h2>How information is used</h2>
+          <p>
+            Information is used to process appointment requests, calculate visit pricing, communicate with
+            patients, coordinate service, process payment, maintain records, prevent abuse, and operate the website.
+          </p>
+
+          <h2>Service providers</h2>
+          <p>
+            M.R.S. Medical Services may use service providers for website hosting, database storage, email delivery,
+            security, and payment processing. Online card checkout is handled by Stripe. On-site card payment is
+            processed through Square.
+          </p>
+
+          <h2>Sharing</h2>
+          <p>
+            Information may be shared when needed to provide services, coordinate with a lab or ordering provider,
+            operate the website, process payment, comply with law, prevent fraud or abuse, or protect patients and
+            the business. Personal information is not sold.
+          </p>
+
+          <h2>Security and retention</h2>
+          <p>
+            The website uses administrative access controls, rate limits, secure browser headers, encrypted HTTPS
+            transport in production, and third-party payment processing so card numbers are not stored by this site.
+            Records are retained only as needed for business, legal, payment, security, and service purposes.
+          </p>
+
+          <h2>Your choices</h2>
+          <p>
+            To request access, correction, or deletion where legally available, email{' '}
+            <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a> or call{' '}
+            <a href="tel:+19084637457">(908) 463-7457</a>.
           </p>
         </div>
       </section>
@@ -2895,6 +3065,8 @@ export default function App() {
       confirm: '/confirm',
       appointmentReview: '/appointment-review',
       accessibility: '/accessibility',
+      privacy: '/privacy',
+      terms: '/terms',
       login: '/login',
       register: '/register',
       forgot: '/forgot-password',
@@ -2927,6 +3099,8 @@ export default function App() {
         {activePage === 'confirm' && <ConfirmAppointmentPage />}
         {activePage === 'appointmentReview' && <AppointmentReviewPage />}
         {activePage === 'accessibility' && <AccessibilityPage />}
+        {activePage === 'privacy' && <PrivacyPage />}
+        {activePage === 'terms' && <TermsPage />}
       </div>
       <Footer onNavigate={navigate} />
     </div>
