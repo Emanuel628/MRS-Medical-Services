@@ -2,7 +2,7 @@
 .about-photo {
   position: relative;
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: 6px;
 }
 
 .hero-media::before,
@@ -34,7 +34,7 @@
   .menu-button { display: block; }
   .hero-grid { grid-template-columns: 1fr; gap: 58px; }
   .hero-copy { max-width: 760px; }
-  .hero-media { min-height: 540px; }
+  .hero-media { min-height: 380px; }
   .photo-badge { left: 24px; }
   .trust-grid article { padding-inline: 24px; }
   .process-layout, .reviews-grid, .faq-grid { grid-template-columns: 1fr; gap: 48px; }
@@ -49,8 +49,8 @@
   .header-inner { min-height: 74px; }
   .brand-mark { width: 39px; height: 39px; }
   .brand-copy strong { font-size: 1.13rem; }
-  .hero { padding: 58px 0 54px; }
-  .hero-media { min-height: 450px; border-radius: 14px; }
+  .hero { padding: 0; }
+  .hero-media { min-height: 340px; border-radius: 6px; }
   .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; }
   .zip-check { width: 100%; max-width: 100%; }
   .zip-row { width: 100%; max-width: 100%; }
@@ -76,7 +76,7 @@
   h1 { font-size: clamp(2.65rem, 14vw, 4rem); }
   h2 { font-size: clamp(2.15rem, 11vw, 3.15rem); }
   .hero-text { font-size: 1rem; }
-  .hero-media { min-height: 350px; border-radius: 12px; }
+  .hero-media { min-height: 280px; border-radius: 6px; }
   .photo-badge { left: 16px; right: 16px; bottom: 18px; width: max-content; max-width: calc(100% - 32px); }
   .zip-check { margin-top: 34px; }
   .zip-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }

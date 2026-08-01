@@ -140,17 +140,22 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   return (
     <main id="top">
       <section className="hero">
-        <div className="hero-copy">
-          <h1>Professional blood draws in the comfort of your space.</h1>
-          <p>
-            M.R.S. Medical Services brings mobile blood collection to homes, offices, and care
-            settings, so routine lab work can fit more easily into the day.
-          </p>
-          <div className="hero-buttons">
-            <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
-              Request a Visit
-            </button>
-            <a className="btn secondary" href="tel:+19084637457">Call Now</a>
+        <div className="wrap hero-inner">
+          <div className="hero-copy">
+            <h1>Professional blood draws in the comfort of your space.</h1>
+            <p>
+              M.R.S. Medical Services brings mobile blood collection to homes, offices, and care
+              settings, so routine lab work can fit more easily into the day.
+            </p>
+            <div className="hero-buttons">
+              <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
+                Request a Visit
+              </button>
+              <a className="btn secondary" href="tel:+19084637457">Call Now</a>
+            </div>
+          </div>
+          <div className="hero-media" aria-label="Mobile phlebotomy visit in a patient's home">
+            <img src="/images/mobile-phlebotomy-hero.png" alt="" />
           </div>
         </div>
       </section>
