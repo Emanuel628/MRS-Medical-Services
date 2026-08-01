@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
-type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin' | 'cancel' | 'confirm';
+type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin' | 'cancel' | 'confirm' | 'accessibility';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
@@ -146,12 +146,14 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/cancel')) return 'cancel';
   if (pathname.startsWith('/confirm')) return 'confirm';
+  if (pathname.startsWith('/accessibility')) return 'accessibility';
   return 'home';
 }
 
 function Header({ activePage, onNavigate }: { activePage: PageKey; onNavigate: (page: PageKey) => void }) {
   return (
     <header className="header">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <div className="wrap header-inner">
         <a
           className="logo"
@@ -186,23 +188,37 @@ function Header({ activePage, onNavigate }: { activePage: PageKey; onNavigate: (
 }
 
 function Footer({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const year = new Date().getFullYear();
+
   return (
     <footer className="footer">
       <div className="wrap footer-inner">
         <div>
-          <strong>M.R.S. Medical Services</strong>
-          <p>Mobile phlebotomy services for convenient specimen collection.</p>
+          <strong>M.R.S. Medical Services™</strong>
+          <p>© {year} M.R.S. Medical Services. All rights reserved.</p>
         </div>
-        <a
-          className="admin-link"
-          href="/admin"
-          onClick={(event) => {
-            event.preventDefault();
-            onNavigate('admin');
-          }}
-        >
-          Admin
-        </a>
+        <div className="footer-links">
+          <a
+            className="admin-link"
+            href="/accessibility"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('accessibility');
+            }}
+          >
+            Accessibility
+          </a>
+          <a
+            className="admin-link"
+            href="/admin"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('admin');
+            }}
+          >
+            Admin
+          </a>
+        </div>
       </div>
     </footer>
   );
@@ -470,6 +486,7 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             </p>
           </div>
           <div className="about-notes">
+            <img className="about-image" src="/images/about-care-team.png" alt="Smiling healthcare team and patient" />
             <div className="about-note">
               <strong>Background includes</strong>
               <ul className="about-list">
@@ -638,7 +655,7 @@ function IntakePage() {
   const [showServiceAreaNotice, setShowServiceAreaNotice] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [dobDraft, setDobDraft] = useState<DateParts>({ year: '', month: '', day: '' });
-  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(getNextWeekday(new Date())));
   const todayKey = getLocalDateKey(new Date());
   const calendarDays = getCalendarDays(visibleMonth);
   const dobYears = getDobYears(new Date(), 120);
@@ -669,6 +686,27 @@ function IntakePage() {
       setForm((currentForm) => ({ ...currentForm, preferredTimeWindow: '' }));
     }
   }, [form.hasKit, form.preferredTimeWindow]);
+
+  useEffect(() => {
+    const currentUnavailable = unavailableByDate[form.requestedDate] || new Set<string>();
+    const currentDateIsOpen = form.requestedDate &&
+      !timeWindowOptions.every((window) => getUnavailableWindows(currentUnavailable, form.hasKit).has(window));
+
+    if (currentDateIsOpen && !selectedUnavailableWindows.has(form.preferredTimeWindow)) return;
+
+    const nextAvailableDate = getNextAvailableVisitDate(blockedTimes, form.hasKit);
+    if (!nextAvailableDate) return;
+
+    setVisibleMonth(startOfMonth(nextAvailableDate));
+    setForm((currentForm) => ({
+      ...currentForm,
+      requestedDate: getLocalDateKey(nextAvailableDate),
+      preferredTimeWindow: currentForm.preferredTimeWindow &&
+        !getUnavailableWindows(unavailableByDate[getLocalDateKey(nextAvailableDate)] || new Set<string>(), currentForm.hasKit).has(currentForm.preferredTimeWindow)
+        ? currentForm.preferredTimeWindow
+        : '',
+    }));
+  }, [blockedTimes, form.hasKit]);
 
   const updateDobPart = (part: keyof DateParts, value: string) => {
     const nextDraft = normalizeDateParts({ ...dobDraft, [part]: value });
@@ -901,9 +939,6 @@ function IntakePage() {
                   inputMode="numeric"
                   required
                 />
-                <span className="field-help">
-                  Regular service area: Ocean, Camden, and Central New Jersey.
-                </span>
               </label>
               <label>
                 Preferred lab
@@ -1290,6 +1325,34 @@ function ConfirmAppointmentPage() {
               </p>
             )}
           </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AccessibilityPage() {
+  return (
+    <main>
+      <PageHero title="Accessibility.">
+        <p>
+          M.R.S. Medical Services is committed to making this website usable for patients, families,
+          providers, and caregivers.
+        </p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap content-block accessibility-content">
+          <h2>Website access</h2>
+          <p>
+            The site is built with keyboard navigation, visible focus states, readable color
+            contrast, descriptive labels, and responsive layouts for mobile and desktop screens.
+          </p>
+          <p>
+            If you have trouble using any part of the website or need help requesting a visit,
+            please call <a href="tel:+19084637457">(908) 463-7457</a> or email{' '}
+            <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a>.
+          </p>
         </div>
       </section>
     </main>
@@ -1868,6 +1931,37 @@ function isAdultPatient(dateOfBirth: string) {
   return birthDate <= cutoff;
 }
 
+function getNextWeekday(startDate: Date) {
+  const date = new Date(startDate);
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + 1);
+  }
+  return date;
+}
+
+function getNextAvailableVisitDate(blockedTimes: BlockedTime[], hasKit: boolean) {
+  const unavailableByDate = blockedTimes.reduce<Record<string, Set<string>>>((availability, blocked) => {
+    const key = getScheduleDateKey(blocked.blockDate);
+    availability[key] = availability[key] || new Set<string>();
+    availability[key].add(blocked.timeWindow);
+    return availability;
+  }, {});
+  const cursor = getNextWeekday(new Date());
+
+  for (let index = 0; index < 45; index += 1) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) {
+      const dateKey = getLocalDateKey(cursor);
+      const unavailable = getUnavailableWindows(unavailableByDate[dateKey] || new Set<string>(), hasKit);
+      const isFull = timeWindowOptions.every((window) => unavailable.has(window));
+      if (!isFull) return new Date(cursor);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return null;
+}
+
 function isServiceableZip(value: string) {
   const zip = value.replace(/\D/g, '').slice(0, 5);
   return zip.length === 5 && serviceableZipPrefixes.some((prefix) => zip.startsWith(prefix));
@@ -1915,8 +2009,8 @@ export default function App() {
 
   const navigate = (page: PageKey) => {
     const item = navItems.find((navItem) => navItem.key === page);
-    if (!item && page !== 'cancel' && page !== 'confirm') return;
-    const path = item?.path || (page === 'confirm' ? '/confirm' : '/cancel');
+    if (!item && page !== 'cancel' && page !== 'confirm' && page !== 'accessibility') return;
+    const path = item?.path || (page === 'confirm' ? '/confirm' : page === 'accessibility' ? '/accessibility' : '/cancel');
     window.history.pushState(null, '', path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setActivePage(page);
@@ -1925,14 +2019,17 @@ export default function App() {
   return (
     <div className="page">
       <Header activePage={activePage} onNavigate={navigate} />
-      {activePage === 'home' && <HomePage onNavigate={navigate} />}
-      {activePage === 'services' && <ServicesPage onNavigate={navigate} />}
-      {activePage === 'intake' && <IntakePage />}
-      {activePage === 'about' && <AboutPage onNavigate={navigate} />}
-      {activePage === 'contact' && <ContactPage />}
-      {activePage === 'admin' && <AdminPage />}
-      {activePage === 'cancel' && <CancelPage />}
-      {activePage === 'confirm' && <ConfirmAppointmentPage />}
+      <div id="main-content" tabIndex={-1}>
+        {activePage === 'home' && <HomePage onNavigate={navigate} />}
+        {activePage === 'services' && <ServicesPage onNavigate={navigate} />}
+        {activePage === 'intake' && <IntakePage />}
+        {activePage === 'about' && <AboutPage onNavigate={navigate} />}
+        {activePage === 'contact' && <ContactPage />}
+        {activePage === 'admin' && <AdminPage />}
+        {activePage === 'cancel' && <CancelPage />}
+        {activePage === 'confirm' && <ConfirmAppointmentPage />}
+        {activePage === 'accessibility' && <AccessibilityPage />}
+      </div>
       <Footer onNavigate={navigate} />
     </div>
   );

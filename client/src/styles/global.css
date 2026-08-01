@@ -20,6 +20,30 @@ a {
   color: inherit;
 }
 
+:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: 12px;
+  z-index: 100;
+  transform: translateY(-140%);
+  padding: 10px 14px;
+  border-radius: 3px;
+  background: var(--navy-deep);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 .page {
   min-height: 100vh;
   background: var(--white);
@@ -376,6 +400,16 @@ a {
 .about-notes {
   display: grid;
   gap: 18px;
+}
+
+.about-image {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  object-fit: cover;
+  object-position: center;
 }
 
 .info-grid {
@@ -887,6 +921,11 @@ a {
   font-weight: 700;
 }
 
+.accessibility-content a {
+  color: var(--navy-deep);
+  font-weight: 800;
+}
+
 .cancel-layout {
   max-width: 760px;
 }
@@ -1067,6 +1106,12 @@ a {
   gap: 28px;
 }
 
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
 .footer strong {
   color: var(--navy-deep);
 }
@@ -1158,6 +1203,10 @@ a {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .footer-links {
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 520px) {
@@ -1200,5 +1249,19 @@ a {
 
   .review-card {
     padding: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
   }
 }
