@@ -394,6 +394,7 @@ function ContactPage() {
                 value={form.email}
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
                 autoComplete="email"
+                required
               />
             </label>
             <label>
@@ -587,6 +588,7 @@ function IntakePage() {
                   value={form.email}
                   onChange={(event) => setForm({ ...form, email: event.target.value })}
                   autoComplete="email"
+                  required
                 />
               </label>
             </div>
@@ -621,6 +623,7 @@ function IntakePage() {
                 <select
                   value={form.preferredLab}
                   onChange={(event) => setForm({ ...form, preferredLab: event.target.value })}
+                  required
                 >
                   <option value="">Select if known</option>
                   {labOptions.map((lab) => (
@@ -726,6 +729,7 @@ function IntakePage() {
                   type="checkbox"
                   checked={form.prescriptionReady}
                   onChange={(event) => setForm({ ...form, prescriptionReady: event.target.checked })}
+                  required
                 />
                 I have a prescription, lab order, or provider instructions.
               </label>
@@ -745,6 +749,7 @@ function IntakePage() {
                 rows={5}
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                required
               />
             </label>
 
