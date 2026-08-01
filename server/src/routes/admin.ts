@@ -14,6 +14,22 @@ type ManualIntakeRequest = {
   preferredTimeWindow?: string;
 };
 
+type AppointmentRequest = {
+  patientName?: string;
+  phone?: string;
+  serviceArea?: string;
+  serviceAddress?: string;
+  appointmentDate?: string;
+  timeWindow?: string;
+  notes?: string;
+};
+
+type BlockedTimeRequest = {
+  blockDate?: string;
+  timeWindow?: string;
+  reason?: string;
+};
+
 function cleanField(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -25,6 +41,37 @@ function hasDatabaseUrl() {
 function isAuthorized(value: unknown) {
   const adminPassword = process.env.ADMIN_PASSWORD;
   return Boolean(adminPassword && typeof value === 'string' && value === adminPassword);
+}
+
+export async function ensureScheduleTables() {
+  if (!hasDatabaseUrl()) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS appointments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      patient_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      service_area TEXT,
+      service_address TEXT,
+      appointment_date DATE NOT NULL,
+      time_window TEXT NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'scheduled',
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS blocked_times (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      block_date DATE NOT NULL,
+      time_window TEXT NOT NULL,
+      reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS appointments_date_idx ON appointments (appointment_date)');
+  await pool.query('CREATE INDEX IF NOT EXISTS blocked_times_date_idx ON blocked_times (block_date)');
 }
 
 router.use((request, response, next) => {
@@ -107,6 +154,131 @@ router.post('/manual-intake', async (request, response) => {
   } catch (error) {
     console.error('Manual intake save failed', error);
     response.status(500).json({ message: 'Manual intake could not be saved.' });
+  }
+});
+
+router.get('/schedule', async (_request, response) => {
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Database is not configured.' });
+    return;
+  }
+
+  try {
+    await ensureScheduleTables();
+    const [appointments, blockedTimes] = await Promise.all([
+      pool.query(`
+        SELECT
+          id,
+          patient_name AS "patientName",
+          phone,
+          service_area AS "serviceArea",
+          service_address AS "serviceAddress",
+          appointment_date AS "appointmentDate",
+          time_window AS "timeWindow",
+          status,
+          notes,
+          created_at AS "createdAt"
+        FROM appointments
+        ORDER BY appointment_date DESC, created_at DESC
+        LIMIT 100
+      `),
+      pool.query(`
+        SELECT
+          id,
+          block_date AS "blockDate",
+          time_window AS "timeWindow",
+          reason,
+          created_at AS "createdAt"
+        FROM blocked_times
+        ORDER BY block_date DESC, created_at DESC
+        LIMIT 100
+      `),
+    ]);
+
+    response.json({ appointments: appointments.rows, blockedTimes: blockedTimes.rows });
+  } catch (error) {
+    console.error('Admin schedule load failed', error);
+    response.status(500).json({ message: 'Schedule could not be loaded.' });
+  }
+});
+
+router.post('/appointments', async (request, response) => {
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Database is not configured.' });
+    return;
+  }
+
+  const body = request.body as AppointmentRequest;
+  const patientName = cleanField(body.patientName);
+  const phone = cleanField(body.phone);
+  const appointmentDate = cleanField(body.appointmentDate);
+  const timeWindow = cleanField(body.timeWindow);
+
+  if (!patientName || !phone || !appointmentDate || !timeWindow) {
+    response.status(400).json({ message: 'Patient, phone, date, and time window are required.' });
+    return;
+  }
+
+  try {
+    await ensureScheduleTables();
+    const result = await pool.query<{ id: string }>(
+      `INSERT INTO appointments (
+        patient_name,
+        phone,
+        service_area,
+        service_address,
+        appointment_date,
+        time_window,
+        notes
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id`,
+      [
+        patientName,
+        phone,
+        cleanField(body.serviceArea) || null,
+        cleanField(body.serviceAddress) || null,
+        appointmentDate,
+        timeWindow,
+        cleanField(body.notes) || null,
+      ],
+    );
+
+    response.json({ message: 'Appointment saved.', id: result.rows[0]?.id });
+  } catch (error) {
+    console.error('Appointment save failed', error);
+    response.status(500).json({ message: 'Appointment could not be saved.' });
+  }
+});
+
+router.post('/blocked-times', async (request, response) => {
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Database is not configured.' });
+    return;
+  }
+
+  const body = request.body as BlockedTimeRequest;
+  const blockDate = cleanField(body.blockDate);
+  const timeWindow = cleanField(body.timeWindow);
+
+  if (!blockDate || !timeWindow) {
+    response.status(400).json({ message: 'Date and time window are required.' });
+    return;
+  }
+
+  try {
+    await ensureScheduleTables();
+    const result = await pool.query<{ id: string }>(
+      `INSERT INTO blocked_times (block_date, time_window, reason)
+      VALUES ($1, $2, $3)
+      RETURNING id`,
+      [blockDate, timeWindow, cleanField(body.reason) || null],
+    );
+
+    response.json({ message: 'Blocked time saved.', id: result.rows[0]?.id });
+  } catch (error) {
+    console.error('Blocked time save failed', error);
+    response.status(500).json({ message: 'Blocked time could not be saved.' });
   }
 });
 

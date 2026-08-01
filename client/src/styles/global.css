@@ -453,6 +453,23 @@ a {
   font-weight: 700;
 }
 
+.availability-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.availability-list strong {
+  color: var(--navy-deep);
+}
+
+.availability-list span {
+  color: var(--text);
+  font-size: 14px;
+}
+
 .admin-link {
   color: var(--navy-deep);
   font-size: 12px;
@@ -502,6 +519,12 @@ a {
 .request-list {
   display: grid;
   gap: 14px;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .request-item {
@@ -617,6 +640,7 @@ a {
   .contact-layout,
   .form-layout,
   .admin-layout,
+  .schedule-grid,
   .form-grid {
     grid-template-columns: 1fr;
   }

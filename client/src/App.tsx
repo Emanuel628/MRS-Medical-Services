@@ -37,6 +37,25 @@ type AdminRequest = {
   createdAt: string;
 };
 
+type Appointment = {
+  id: string;
+  patientName: string;
+  phone: string;
+  serviceArea: string | null;
+  serviceAddress: string | null;
+  appointmentDate: string;
+  timeWindow: string;
+  status: string;
+  notes: string | null;
+};
+
+type BlockedTime = {
+  id: string;
+  blockDate: string;
+  timeWindow: string;
+  reason: string | null;
+};
+
 const steps = [
   ['1', 'Request a visit', 'Share the basic details and location so the visit can be reviewed.'],
   ['2', 'Confirm the order', 'Have the required lab order, kit, or collection instructions ready.'],
@@ -444,6 +463,14 @@ function IntakePage() {
   });
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
+  const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
+
+  useEffect(() => {
+    fetch('/api/availability/blocked-times')
+      .then((response) => response.json())
+      .then((result: { blockedTimes?: BlockedTime[] }) => setBlockedTimes(result.blockedTimes || []))
+      .catch(() => setBlockedTimes([]));
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -654,6 +681,16 @@ function IntakePage() {
             <p>All blood draws require a prescription, lab order, or kit instructions.</p>
             <p>Normal draws are $80. Additional kits or different provider orders are $20 each.</p>
             <p>Visit requests are reviewed before confirmation so drive time can be planned between appointments.</p>
+            {blockedTimes.length > 0 && (
+              <div className="availability-list">
+                <strong>Currently unavailable</strong>
+                {blockedTimes.slice(0, 6).map((blocked) => (
+                  <span key={blocked.id}>
+                    {formatScheduleDate(blocked.blockDate)} | {blocked.timeWindow}
+                  </span>
+                ))}
+              </div>
+            )}
           </aside>
         </div>
       </section>
@@ -664,6 +701,8 @@ function IntakePage() {
 function AdminPage() {
   const [password, setPassword] = useState(() => window.sessionStorage.getItem('mrsAdminPassword') || '');
   const [requests, setRequests] = useState<AdminRequest[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [manualForm, setManualForm] = useState({
@@ -675,6 +714,34 @@ function AdminPage() {
     preferredTimeWindow: '',
     message: '',
   });
+  const [appointmentForm, setAppointmentForm] = useState({
+    patientName: '',
+    phone: '',
+    serviceArea: '',
+    serviceAddress: '',
+    appointmentDate: '',
+    timeWindow: '',
+    notes: '',
+  });
+  const [blockForm, setBlockForm] = useState({ blockDate: '', timeWindow: '', reason: '' });
+
+  const loadSchedule = async (adminPassword = password) => {
+    const response = await fetch('/api/admin/schedule', {
+      headers: { 'x-admin-password': adminPassword },
+    });
+    const result = (await response.json().catch(() => ({}))) as {
+      message?: string;
+      appointments?: Appointment[];
+      blockedTimes?: BlockedTime[];
+    };
+
+    if (!response.ok) {
+      throw new Error(result.message || 'Schedule could not be loaded.');
+    }
+
+    setAppointments(result.appointments || []);
+    setBlockedTimes(result.blockedTimes || []);
+  };
 
   const loadRequests = async (adminPassword = password) => {
     setStatus('loading');
@@ -695,11 +762,80 @@ function AdminPage() {
 
       window.sessionStorage.setItem('mrsAdminPassword', adminPassword);
       setRequests(result.requests || []);
+      await loadSchedule(adminPassword);
       setStatus('success');
       setStatusMessage('');
     } catch (error) {
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Control center could not be loaded.');
+    }
+  };
+
+  const handleAppointment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('loading');
+    setStatusMessage('Saving appointment...');
+
+    try {
+      const response = await fetch('/api/admin/appointments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': password,
+        },
+        body: JSON.stringify(appointmentForm),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Appointment could not be saved.');
+      }
+
+      setAppointmentForm({
+        patientName: '',
+        phone: '',
+        serviceArea: '',
+        serviceAddress: '',
+        appointmentDate: '',
+        timeWindow: '',
+        notes: '',
+      });
+      await loadSchedule(password);
+      setStatus('success');
+      setStatusMessage('Appointment saved.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Appointment could not be saved.');
+    }
+  };
+
+  const handleBlockedTime = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('loading');
+    setStatusMessage('Saving blocked time...');
+
+    try {
+      const response = await fetch('/api/admin/blocked-times', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': password,
+        },
+        body: JSON.stringify(blockForm),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Blocked time could not be saved.');
+      }
+
+      setBlockForm({ blockDate: '', timeWindow: '', reason: '' });
+      await loadSchedule(password);
+      setStatus('success');
+      setStatusMessage('Blocked time saved.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Blocked time could not be saved.');
     }
   };
 
@@ -878,10 +1014,167 @@ function AdminPage() {
               <p className="admin-empty">No saved requests loaded.</p>
             )}
           </section>
+
+          <form className="contact-form admin-panel" onSubmit={handleAppointment}>
+            <h2>Set appointment</h2>
+            <div className="form-grid">
+              <label>
+                Patient
+                <input
+                  value={appointmentForm.patientName}
+                  onChange={(event) => setAppointmentForm({ ...appointmentForm, patientName: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={appointmentForm.phone}
+                  onChange={(event) => setAppointmentForm({ ...appointmentForm, phone: event.target.value })}
+                  required
+                />
+              </label>
+            </div>
+            <label>
+              Service address
+              <input
+                value={appointmentForm.serviceAddress}
+                onChange={(event) => setAppointmentForm({ ...appointmentForm, serviceAddress: event.target.value })}
+              />
+            </label>
+            <div className="form-grid">
+              <label>
+                Service area
+                <select
+                  value={appointmentForm.serviceArea}
+                  onChange={(event) => setAppointmentForm({ ...appointmentForm, serviceArea: event.target.value })}
+                >
+                  <option value="">Select service area</option>
+                  {serviceAreaOptions.map((area) => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                  <option value="Other">Other / not sure</option>
+                </select>
+              </label>
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={appointmentForm.appointmentDate}
+                  onChange={(event) => setAppointmentForm({ ...appointmentForm, appointmentDate: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Time window
+                <select
+                  value={appointmentForm.timeWindow}
+                  onChange={(event) => setAppointmentForm({ ...appointmentForm, timeWindow: event.target.value })}
+                  required
+                >
+                  <option value="">Select time</option>
+                  {timeWindowOptions.map((window) => (
+                    <option key={window} value={window}>{window}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label>
+              Notes
+              <textarea
+                rows={4}
+                value={appointmentForm.notes}
+                onChange={(event) => setAppointmentForm({ ...appointmentForm, notes: event.target.value })}
+              />
+            </label>
+            <button className="btn primary" type="submit" disabled={status === 'loading' || !password}>
+              Save Appointment
+            </button>
+          </form>
+
+          <form className="contact-form admin-panel" onSubmit={handleBlockedTime}>
+            <h2>Block time</h2>
+            <div className="form-grid">
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={blockForm.blockDate}
+                  onChange={(event) => setBlockForm({ ...blockForm, blockDate: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Time window
+                <select
+                  value={blockForm.timeWindow}
+                  onChange={(event) => setBlockForm({ ...blockForm, timeWindow: event.target.value })}
+                  required
+                >
+                  <option value="">Select time</option>
+                  {timeWindowOptions.map((window) => (
+                    <option key={window} value={window}>{window}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label>
+              Reason
+              <input
+                value={blockForm.reason}
+                onChange={(event) => setBlockForm({ ...blockForm, reason: event.target.value })}
+              />
+            </label>
+            <button className="btn primary" type="submit" disabled={status === 'loading' || !password}>
+              Save Block
+            </button>
+          </form>
+
+          <section className="admin-panel admin-requests">
+            <div className="admin-panel-header">
+              <h2>Schedule</h2>
+              <button className="btn secondary" type="button" onClick={() => void loadSchedule()} disabled={!password}>
+                Refresh
+              </button>
+            </div>
+            <div className="schedule-grid">
+              <div className="request-list">
+                {appointments.map((appointment) => (
+                  <article key={appointment.id} className="request-item">
+                    <div>
+                      <strong>{appointment.patientName}</strong>
+                      <span>{appointment.status}</span>
+                    </div>
+                    <p>{formatScheduleDate(appointment.appointmentDate)} | {appointment.timeWindow}</p>
+                    <p>{appointment.phone} | {appointment.serviceArea || 'Area not set'}</p>
+                    <p>{appointment.serviceAddress || appointment.notes || 'No notes.'}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="request-list">
+                {blockedTimes.map((blocked) => (
+                  <article key={blocked.id} className="request-item">
+                    <div>
+                      <strong>{formatScheduleDate(blocked.blockDate)}</strong>
+                      <span>blocked</span>
+                    </div>
+                    <p>{blocked.timeWindow}</p>
+                    <p>{blocked.reason || 'No reason entered.'}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
         </div>
       </section>
     </main>
   );
+}
+
+function formatScheduleDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function PageHero({ title, children }: { title: string; children: ReactNode }) {
