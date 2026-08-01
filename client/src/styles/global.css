@@ -216,6 +216,9 @@ a {
 
 .benefits article {
   min-height: 130px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
   padding: 34px 38px;
   border-right: 1px solid var(--border);
 }
@@ -234,6 +237,21 @@ a {
   color: var(--text);
   font-size: 14px;
   line-height: 1.45;
+}
+
+.svg-icon {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  padding: 16px;
+  border: 1.5px solid var(--navy-deep);
+  border-radius: 50%;
+  color: var(--navy-deep);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
 }
 
 .section,
@@ -359,6 +377,90 @@ a {
   color: var(--text);
   font-size: 16px;
   line-height: 1.58;
+}
+
+.reviews-section {
+  background: linear-gradient(90deg, #f7fbfc, #ffffff);
+  border-top: 1px solid var(--border);
+}
+
+.reviews-layout {
+  display: grid;
+  grid-template-columns: .8fr 1.2fr;
+  gap: 72px;
+  align-items: start;
+}
+
+.trust-list {
+  display: grid;
+  gap: 13px;
+  margin: 26px 0 28px;
+  padding: 0;
+  list-style: none;
+}
+
+.trust-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.check-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1px solid var(--teal);
+  border-radius: 50%;
+  color: var(--teal-dark);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.review-card {
+  min-width: 0;
+  padding: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--white);
+  box-shadow: 0 18px 42px rgba(11, 41, 69, .07);
+}
+
+.stars {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 18px;
+}
+
+.star-icon {
+  width: 19px;
+  height: 19px;
+  color: var(--teal-dark);
+  fill: currentColor;
+}
+
+.review-card p {
+  margin: 0 0 22px;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.review-card strong {
+  color: var(--navy-deep);
+  font-size: 14px;
+  letter-spacing: .04em;
 }
 
 .content-block .btn {
@@ -820,6 +922,7 @@ a {
   .services-layout,
   .about-layout,
   .contact-layout,
+  .reviews-layout,
   .form-layout,
   .admin-layout,
   .schedule-grid,
@@ -840,7 +943,8 @@ a {
 
   .steps,
   .service-list,
-  .info-grid {
+  .info-grid,
+  .review-grid {
     grid-template-columns: 1fr;
   }
 
@@ -884,5 +988,21 @@ a {
 
   .calendar-day small {
     display: none;
+  }
+
+  .benefits article {
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .svg-icon {
+    width: 58px;
+    height: 58px;
+    flex-basis: 58px;
+    padding: 13px;
+  }
+
+  .review-card {
+    padding: 24px;
   }
 }

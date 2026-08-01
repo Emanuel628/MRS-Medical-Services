@@ -65,6 +65,30 @@ const steps = [
   ['4', 'Specimen handoff', 'Specimens are handled according to the lab order or provider request.'],
 ];
 
+const benefitItems = [
+  ['home', 'Convenient', 'Service is planned around an approved home, office, or facility visit.'],
+  ['shield', 'Professional', 'Care is handled with a focus on comfort, safety, and clear communication.'],
+  ['heart', 'Comfortable', 'Mobile collection helps blood work fit more easily into the day.'],
+];
+
+const trustItems = [
+  'Certified phlebotomy service',
+  'CPR and first aid trained',
+  'Insured mobile visits',
+  'Patient privacy handled with care',
+];
+
+const reviews = [
+  [
+    'Such a great experience. She was on time, professional, and made me feel so comfortable.',
+    'J. M.',
+  ],
+  [
+    'Having someone come to my home made all the difference. Friendly, efficient, and convenient.',
+    'L. T.',
+  ],
+];
+
 function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/services')) return 'services';
   if (pathname.startsWith('/intake')) return 'intake';
@@ -162,18 +186,15 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 
       <section className="benefits">
         <div className="wrap benefits-grid">
-          <article>
-            <strong>Convenient</strong>
-            <p>Service is planned around an approved home, office, or facility visit.</p>
-          </article>
-          <article>
-            <strong>Route-aware</strong>
-            <p>Visit requests are reviewed with location and timing in mind.</p>
-          </article>
-          <article>
-            <strong>Easy to start</strong>
-            <p>The intake form gathers the basics needed to review a visit.</p>
-          </article>
+          {benefitItems.map(([icon, title, description]) => (
+            <article key={title}>
+              <SvgIcon name={icon} />
+              <div>
+                <strong>{title}</strong>
+                <p>{description}</p>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -196,6 +217,42 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         </div>
       </section>
 
+      <section className="section reviews-section">
+        <div className="wrap reviews-layout">
+          <div className="section-title">
+            <span>Trust and reviews</span>
+            <h2>Care that feels personal and prepared.</h2>
+            <i />
+            <ul className="trust-list">
+              {trustItems.map((item) => (
+                <li key={item}>
+                  <SvgIcon name="check" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <button className="btn secondary" type="button" onClick={() => onNavigate('about')}>
+              Learn More About Us
+            </button>
+          </div>
+          <div className="review-grid">
+            {reviews.map(([quote, author]) => (
+              <article className="review-card" key={author}>
+                <div className="stars" aria-label="Five star review">
+                  <SvgIcon name="star" />
+                  <SvgIcon name="star" />
+                  <SvgIcon name="star" />
+                  <SvgIcon name="star" />
+                  <SvgIcon name="star" />
+                </div>
+                <p>&ldquo;{quote}&rdquo;</p>
+                <strong>- {author}</strong>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="cta">
         <div className="wrap cta-inner">
           <div>
@@ -208,6 +265,48 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         </div>
       </section>
     </main>
+  );
+}
+
+function SvgIcon({ name }: { name: string }) {
+  if (name === 'home') {
+    return (
+      <svg className="svg-icon" viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M8 23.5 24 10l16 13.5" />
+        <path d="M13 22v17h8V28h6v11h8V22" />
+      </svg>
+    );
+  }
+
+  if (name === 'shield') {
+    return (
+      <svg className="svg-icon" viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M24 7 38 12v11c0 9.5-5.8 15.3-14 18-8.2-2.7-14-8.5-14-18V12l14-5Z" />
+        <path d="m17 24 5 5 10-11" />
+      </svg>
+    );
+  }
+
+  if (name === 'heart') {
+    return (
+      <svg className="svg-icon" viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M24 39S10 30.5 10 18.5C10 13.7 13.5 10 18 10c2.7 0 5 1.3 6 3.4C25 11.3 27.3 10 30 10c4.5 0 8 3.7 8 8.5C38 30.5 24 39 24 39Z" />
+      </svg>
+    );
+  }
+
+  if (name === 'star') {
+    return (
+      <svg className="star-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="check-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m5 12 4 4 10-9" />
+    </svg>
   );
 }
 
