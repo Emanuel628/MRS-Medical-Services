@@ -21,8 +21,17 @@ const serviceItems = [
 
 const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
 const serviceAreaOptions = ['Ocean County', 'Central New Jersey', 'Camden County'];
-const timeWindowOptions = ['6 AM - 8 AM', '8 AM - 10 AM', '10 AM - 12 PM', '12 PM - 2 PM'];
-const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const timeWindowOptions = [
+  '6 AM - 7 AM',
+  '7 AM - 8 AM',
+  '8 AM - 9 AM',
+  '9 AM - 10 AM',
+  '10 AM - 11 AM',
+  '11 AM - 12 PM',
+  '12 PM - 1 PM',
+  '1 PM - 2 PM',
+];
+const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
 type AdminRequest = {
   id: string;
@@ -66,7 +75,7 @@ const steps = [
 ];
 
 const benefitItems = [
-  ['home', 'Convenient', 'Service is planned around an approved home, office, or facility visit.'],
+  ['home', 'Convenient', 'Service is planned around an approved home, job, office, or facility visit.'],
   ['shield', 'Professional', 'Care is handled with a focus on comfort, safety, and clear communication.'],
   ['heart', 'Comfortable', 'Mobile collection helps blood work fit more easily into the day.'],
 ];
@@ -168,8 +177,8 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           <div className="hero-copy">
             <h1>Professional blood draws in the comfort of your space.</h1>
             <p>
-              M.R.S. Medical Services brings mobile blood collection to homes, offices, and care
-              settings, so routine lab work can fit more easily into the day.
+              M.R.S. Medical Services brings mobile blood collection to homes, workplaces, offices,
+              and care settings, so routine lab work can fit more easily into the day.
             </p>
             <div className="hero-buttons">
               <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
@@ -575,6 +584,7 @@ function IntakePage() {
       .filter((blocked) => getScheduleDateKey(blocked.blockDate) === form.requestedDate)
       .map((blocked) => blocked.timeWindow),
   );
+  const selectedUnavailableWindows = getUnavailableWindows(selectedBlockedWindows, form.hasKit);
   const unavailableByDate = blockedTimes.reduce<Record<string, Set<string>>>((availability, blocked) => {
     const key = getScheduleDateKey(blocked.blockDate);
     availability[key] = availability[key] || new Set<string>();
@@ -590,6 +600,12 @@ function IntakePage() {
       .catch(() => setBlockedTimes([]));
   }, []);
 
+  useEffect(() => {
+    if (form.hasKit && form.preferredTimeWindow && isKitRestrictedWindow(form.preferredTimeWindow)) {
+      setForm((currentForm) => ({ ...currentForm, preferredTimeWindow: '' }));
+    }
+  }, [form.hasKit, form.preferredTimeWindow]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -599,7 +615,7 @@ function IntakePage() {
       return;
     }
 
-    if (form.preferredTimeWindow && selectedBlockedWindows.has(form.preferredTimeWindow)) {
+    if (form.preferredTimeWindow && selectedUnavailableWindows.has(form.preferredTimeWindow)) {
       setStatus('error');
       setStatusMessage('That time window is unavailable. Please choose another option.');
       return;
@@ -640,6 +656,7 @@ function IntakePage() {
           serviceArea: form.serviceArea,
           preferredDate: form.requestedDate,
           preferredTimeWindow: form.preferredTimeWindow,
+          hasKit: form.hasKit,
         }),
       });
 
@@ -672,6 +689,7 @@ function IntakePage() {
           <div className="notice-card" role="note">
             <strong>Before choosing a visit time</strong>
             <p>{appointmentConfirmationNote}</p>
+            <p>Specialty kit collections must be scheduled before 10 AM.</p>
           </div>
 
           <form className="contact-form intake-form" onSubmit={handleSubmit}>
@@ -723,6 +741,7 @@ function IntakePage() {
                 autoComplete="street-address"
                 required
               />
+              <span className="field-help">Home, job, office, facility, or approved care setting.</span>
             </label>
 
             <div className="form-grid">
@@ -788,14 +807,18 @@ function IntakePage() {
               </div>
 
               <div className="calendar-grid">
-                {calendarDays.map((date) => {
+                {calendarDays.map((date, index) => {
+                  if (!date) {
+                    return <span key={`empty-${index}`} className="calendar-day-empty" aria-hidden="true" />;
+                  }
+
                   const dateKey = getLocalDateKey(date);
                   const blockedForDate = unavailableByDate[dateKey] || new Set<string>();
+                  const unavailableForDate = getUnavailableWindows(blockedForDate, form.hasKit);
                   const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
                   const isPast = dateKey < todayKey;
-                  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                  const isFull = timeWindowOptions.every((window) => blockedForDate.has(window));
-                  const isDisabled = !isCurrentMonth || isPast || isWeekend || isFull;
+                  const isFull = timeWindowOptions.every((window) => unavailableForDate.has(window));
+                  const isDisabled = !isCurrentMonth || isPast || isFull;
 
                   return (
                     <button
@@ -807,15 +830,15 @@ function IntakePage() {
                         setForm({
                           ...form,
                           requestedDate: dateKey,
-                          preferredTimeWindow: blockedForDate.has(form.preferredTimeWindow)
+                          preferredTimeWindow: unavailableForDate.has(form.preferredTimeWindow)
                             ? ''
                             : form.preferredTimeWindow,
                         });
                       }}
                     >
                       <span>{date.getDate()}</span>
-                      {isCurrentMonth && !isPast && !isWeekend && (
-                        <small>{isFull ? 'Full' : `${timeWindowOptions.length - blockedForDate.size} open`}</small>
+                      {isCurrentMonth && !isPast && (
+                        <small>{isFull ? 'Full' : `${timeWindowOptions.length - unavailableForDate.size} open`}</small>
                       )}
                     </button>
                   );
@@ -823,10 +846,14 @@ function IntakePage() {
               </div>
 
               <div className="time-slot-panel">
-                <strong>{form.requestedDate ? 'Available time windows' : 'Choose a date to see times'}</strong>
-                <div className="time-slot-grid">
+                <strong>{form.requestedDate ? 'Available hourly times' : 'Choose a date to see times'}</strong>
+                {form.hasKit && (
+                  <span className="time-slot-note">Kit collections must be scheduled before 10 AM.</span>
+                )}
+                <div className="time-slot-rolodex">
                   {timeWindowOptions.map((window) => {
-                    const isUnavailable = selectedBlockedWindows.has(window);
+                    const isKitBlocked = form.hasKit && isKitRestrictedWindow(window);
+                    const isUnavailable = selectedUnavailableWindows.has(window);
 
                     return (
                       <button
@@ -837,7 +864,7 @@ function IntakePage() {
                         onClick={() => setForm({ ...form, preferredTimeWindow: window })}
                       >
                         <span>{window}</span>
-                        <small>{isUnavailable ? 'Unavailable' : 'Available'}</small>
+                        <small>{isKitBlocked ? 'Kit cutoff' : isUnavailable ? 'Unavailable' : 'Available'}</small>
                       </button>
                     );
                   })}
@@ -861,7 +888,7 @@ function IntakePage() {
                   checked={form.hasKit}
                   onChange={(event) => setForm({ ...form, hasKit: event.target.checked })}
                 />
-                I have a specialty collection kit.
+                I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
               </label>
             </div>
 
@@ -1385,16 +1412,43 @@ function formatScheduleDate(value: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function getCalendarDays(monthDate: Date) {
+function getCalendarDays(monthDate: Date): Array<Date | null> {
   const firstDay = startOfMonth(monthDate);
-  const firstGridDay = new Date(firstDay);
-  firstGridDay.setDate(firstGridDay.getDate() - firstGridDay.getDay());
+  const days: Array<Date | null> = Array.from({ length: Math.max(firstDay.getDay() - 1, 0) }, () => null);
+  const cursor = new Date(firstDay);
 
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(firstGridDay);
-    date.setDate(firstGridDay.getDate() + index);
-    return date;
-  });
+  while (cursor.getMonth() === monthDate.getMonth()) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) {
+      days.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  while (days.length % 5 !== 0) {
+    days.push(null);
+  }
+
+  return days;
+}
+
+function getTimeWindowStartHour(value: string) {
+  const match = value.match(/^(\d+)\s(AM|PM)/);
+  if (!match) return 0;
+
+  const hour = Number(match[1]);
+  if (match[2] === 'AM') return hour === 12 ? 0 : hour;
+  return hour === 12 ? 12 : hour + 12;
+}
+
+function isKitRestrictedWindow(value: string) {
+  return getTimeWindowStartHour(value) >= 10;
+}
+
+function getUnavailableWindows(blockedWindows: Set<string>, hasKit: boolean) {
+  return new Set(
+    timeWindowOptions.filter((window) => blockedWindows.has(window) || (hasKit && isKitRestrictedWindow(window))),
+  );
 }
 
 function startOfMonth(value: Date) {

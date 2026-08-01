@@ -13,6 +13,7 @@ type ContactRequest = {
   serviceArea?: string;
   preferredDate?: string;
   preferredTimeWindow?: string;
+  hasKit?: boolean;
 };
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -21,6 +22,7 @@ const contactFromEmail = process.env.CONTACT_FROM_EMAIL || 'M.R.S. Medical Servi
 let databaseReady = false;
 const appointmentConfirmationNote =
   'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. M.R.S. Medical Services will soon be accepting insurance.';
+const kitScheduleNote = 'Specialty kit collections must be scheduled before 10 AM.';
 
 function cleanField(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -103,6 +105,7 @@ router.post('/', async (request, response) => {
   const email = cleanField(body.email);
   const message = cleanField(body.message);
   const requestType = cleanRequestType(cleanField(body.requestType));
+  const hasKit = body.hasKit === true;
 
   if (!name || !phone || !email || !message) {
     response.status(400).json({ message: 'Name, phone, email, and message are required.' });
@@ -165,6 +168,7 @@ router.post('/', async (request, response) => {
           'Your visit request was received.',
           '',
           appointmentConfirmationNote,
+          ...(hasKit ? [kitScheduleNote] : []),
           '',
           `Requested date: ${cleanField(body.preferredDate) || 'Not specified'}`,
           `Requested time window: ${cleanField(body.preferredTimeWindow) || 'Not specified'}`,
