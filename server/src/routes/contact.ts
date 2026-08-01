@@ -888,6 +888,8 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
     const saved = result.rows[0] ?? null;
     if (saved && requestType === 'intake' && preferredDate && preferredTimeWindow) {
       const reservationStatus = paymentMethod === 'card' ? 'reserved' : 'held';
+      const reservationExpiresAt =
+        reservationStatus === 'reserved' ? new Date(Date.now() + checkoutReservationMinutes * 60000) : null;
       await client.query(
         `INSERT INTO appointment_slot_reservations (
           contact_request_id,
@@ -896,8 +898,8 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
           status,
           expires_at
         )
-        VALUES ($1, $2, $3, $4, CASE WHEN $4 = 'reserved' THEN NOW() + ($5 || ' minutes')::INTERVAL ELSE NULL END)`,
-        [saved.id, preferredDate, preferredTimeWindow, reservationStatus, checkoutReservationMinutes],
+        VALUES ($1, $2, $3, $4, $5)`,
+        [saved.id, preferredDate, preferredTimeWindow, reservationStatus, reservationExpiresAt],
       );
     }
 
