@@ -584,6 +584,40 @@ a {
   padding: 0 12px;
 }
 
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.contact-form .password-field input {
+  padding-right: 74px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  min-width: 54px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--teal-dark);
+  background: #f8fcfd;
+  font: 800 12px / 1 Arial, sans-serif;
+  cursor: pointer;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  border-color: var(--teal);
+  color: var(--navy-deep);
+}
+
+.password-toggle:focus-visible {
+  outline: 3px solid rgba(27, 145, 151, .18);
+  outline-offset: 2px;
+}
+
 .contact-form select {
   height: 44px;
   padding: 0 12px;

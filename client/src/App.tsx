@@ -1549,6 +1549,7 @@ function AccessibilityPage() {
 function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
 
@@ -1606,13 +1607,23 @@ function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             </label>
             <label>
               Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
+              <span className="password-field">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  className="password-toggle"
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </span>
             </label>
             <button className="btn primary" type="submit" disabled={status === 'sending'}>
               {status === 'sending' ? 'Signing in...' : 'Login'}
@@ -1651,6 +1662,8 @@ function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 
 function RegisterPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const passwordScore = getPasswordScore(form.password);
@@ -1706,13 +1719,23 @@ function RegisterPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             </label>
             <label>
               Password
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm({ ...form, password: event.target.value })}
-                autoComplete="new-password"
-                required
-              />
+              <span className="password-field">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={(event) => setForm({ ...form, password: event.target.value })}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  className="password-toggle"
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </span>
             </label>
             <div className={`password-meter score-${passwordScore}`} aria-label={`Password strength: ${getPasswordStrengthLabel(passwordScore)}`}>
               <span />
@@ -1724,13 +1747,23 @@ function RegisterPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             </ul>
             <label>
               Confirm password
-              <input
-                type="password"
-                value={form.confirmPassword}
-                onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
-                autoComplete="new-password"
-                required
-              />
+              <span className="password-field">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={form.confirmPassword}
+                  onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  className="password-toggle"
+                  type="button"
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                  aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                >
+                  {showConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </span>
             </label>
             <button className="btn primary" type="submit" disabled={status === 'sending'}>
               {status === 'sending' ? 'Sending...' : 'Request Access'}
