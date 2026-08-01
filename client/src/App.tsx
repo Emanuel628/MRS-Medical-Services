@@ -113,7 +113,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <button className="btn primary" type="button" onClick={() => onNavigate('contact')}>
               Request a Visit
             </button>
-            <a className="btn secondary" href="tel:+17327660266">Call Now</a>
+            <a className="btn secondary" href="tel:+19084637457">Call Now</a>
           </div>
         </div>
       </section>
@@ -329,7 +329,7 @@ function ContactPage() {
 
           <aside className="contact-card">
             <h2>Contact details</h2>
-            <p><strong>Phone:</strong> <a href="tel:+17327660266">(732) 766-0266</a></p>
+            <p><strong>Phone:</strong> <a href="tel:+19084637457">(908) 463-7457</a></p>
             <p><strong>Email:</strong> <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a></p>
             <p>
               Do not include sensitive medical information in the first message. Basic scheduling
