@@ -123,10 +123,9 @@ type DateParts = {
 
 const steps = [
   ['1', 'Request a visit', 'Share your location, preferred timing, and collection needs.'],
-  ['2', 'Confirm the details', 'Review the requested visit details before payment or pay-at-site selection.'],
-  ['3', 'Secure checkout', 'Card-paying patients complete Stripe checkout to confirm the appointment automatically.'],
-  ['4', 'Collection visit', 'A mobile phlebotomy visit is completed at the approved location.'],
-  ['5', 'Specimen handoff', 'Specimens are handled according to the lab order or provider request.'],
+  ['2', 'Choose payment', 'Review the visit total and choose card checkout or on-site payment.'],
+  ['3', 'Collection visit', 'M.R.S. completes the mobile blood draw at the approved location.'],
+  ['4', 'Specimen handoff', 'Specimens are handled according to the lab order or provider request.'],
 ];
 
 const benefitItems = [
@@ -381,7 +380,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <h1>Professional blood draws in the comfort of your space.</h1>
             <p>
               M.R.S. Medical Services brings mobile blood collection to homes, workplaces, offices,
-              and care settings, so routine lab work can fit more easily into the day.
+              and care settings, making routine lab work easier to fit into the day.
             </p>
             <div className="hero-buttons">
               <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
@@ -472,7 +471,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap cta-inner">
           <div>
             <h3>Need a mobile blood draw?</h3>
-            <p>Start with the appointment form and M.R.S. will follow up to confirm timing.</p>
+            <p>Send the appointment details and choose the payment option that works best for the visit.</p>
           </div>
           <button className="btn teal" type="button" onClick={() => onNavigate('intake')}>
             Request Visit
@@ -528,12 +527,18 @@ function SvgIcon({ name }: { name: string }) {
 function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   return (
     <main>
-      <PageHero title="Mobile blood collection made simple.">
-        <p>
-          M.R.S. supports common mobile blood draw needs throughout the listed service areas. Each
-          visit is reviewed before it is placed on the schedule.
-        </p>
-      </PageHero>
+      <section className="page-hero image-page-hero">
+        <div className="wrap image-page-hero-inner">
+          <div>
+            <h1>Mobile blood collection made simple.</h1>
+            <p>
+              M.R.S. supports routine and specialty blood draw needs throughout the service area,
+              with clear scheduling, careful specimen handling, and a calm visit experience.
+            </p>
+          </div>
+          <img src="/images/services-phlebotomy-tools.png" alt="Phlebotomy tubes and collection supplies arranged on a clean table" />
+        </div>
+      </section>
 
       <section className="section">
         <div className="wrap services-layout">
@@ -556,10 +561,9 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <span className="eyebrow">Payment</span>
             <h2>Payment options are expanding.</h2>
             <p>
-              Visit cost is confirmed before scheduling. Service location and collection needs are
-              reviewed before payment is collected.
+              Visit cost is calculated from the appointment details before checkout or on-site payment.
             </p>
-            <p>M.R.S. Medical Services will be accepting insurance soon.</p>
+            <p>Insurance payment is planned for a later phase after the required approvals are in place.</p>
           </article>
           <article>
             <span className="eyebrow">Requirements</span>
@@ -600,8 +604,8 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           <div>
             <h1>Personal, professional mobile collection.</h1>
             <p>
-              M.R.S. Medical Services brings experienced, certified phlebotomy care to patients who
-              need blood work completed outside of a traditional lab setting.
+              M.R.S. Medical Services brings experienced, certified phlebotomy care to people who
+              need blood work completed outside a traditional lab setting.
             </p>
           </div>
           <img src="/images/about-care-team.png" alt="Smiling healthcare team and patient" />
@@ -619,7 +623,7 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             </p>
             <p>
               My mission is to make laboratory testing more convenient by bringing high-quality
-              phlebotomy services directly to patients in their homes, workplaces, assisted living
+              phlebotomy services directly to people in their homes, workplaces, assisted living
               facilities, and other healthcare settings.
             </p>
             <p>
@@ -666,7 +670,7 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap cta-inner">
           <div>
             <h3>Have a general question?</h3>
-            <p>Use the contact page for questions that are not ready for an appointment request.</p>
+            <p>Use the contact page for questions that do not need the full appointment form yet.</p>
           </div>
           <button className="btn teal" type="button" onClick={() => onNavigate('contact')}>
             Contact Us
@@ -711,11 +715,18 @@ function ContactPage() {
 
   return (
     <main>
-      <PageHero title="Contact M.R.S. Medical Services.">
-        <p>
-          Send a general question or ask for help before using the appointment form.
-        </p>
-      </PageHero>
+      <section className="page-hero image-page-hero">
+        <div className="wrap image-page-hero-inner">
+          <div>
+            <h1>Contact M.R.S. Medical Services.</h1>
+            <p>
+              Send a general question, ask about service details, or get help before completing the
+              appointment form.
+            </p>
+          </div>
+          <img src="/images/contact-care-coordination.png" alt="Healthcare professional coordinating appointments on a laptop" />
+        </div>
+      </section>
 
       <section className="section">
         <div className="wrap contact-layout">
@@ -773,10 +784,7 @@ function ContactPage() {
             <p><strong>Phone:</strong> <a href="tel:+19084637457">(908) 463-7457</a></p>
             <p><strong>Email:</strong> <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a></p>
             <p><strong>Hours:</strong> Monday-Friday, 6 AM-2 PM</p>
-            <p>
-              For visit requests, use the appointment page so the calendar, location, and required
-              paperwork can be reviewed together.
-            </p>
+            <p>For visit requests, use the appointment page so scheduling, location, and paperwork stay together.</p>
           </aside>
         </div>
       </section>
@@ -1073,10 +1081,10 @@ function IntakePage() {
           <div>
             <h1>Appointment request.</h1>
             <p>
-              Send the visit details, choose a payment method, and complete checkout when paying by card.
+              Share the visit details, choose a payment method, and complete checkout if paying by card.
             </p>
           </div>
-          <img src="/images/intake-consultation.png" alt="Mobile phlebotomy intake review" />
+          <img src="/images/intake-consultation.png" alt="Mobile phlebotomy appointment review" />
         </div>
       </section>
 
@@ -1225,6 +1233,7 @@ function IntakePage() {
                     })}
                   />
                   <span>Group</span>
+                  <small>For more than 1 patient.</small>
                 </label>
                 {form.isGroup && (
                   <>
@@ -1376,7 +1385,7 @@ function IntakePage() {
             )}
 
             <button className="btn primary" type="submit" disabled={status === 'sending'}>
-              {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Intake'}
+              {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Appointment'}
             </button>
             {statusMessage && (
               <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">

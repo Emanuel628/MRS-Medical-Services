@@ -284,12 +284,14 @@ a {
 }
 
 .intake-hero,
-.about-hero {
+.about-hero,
+.image-page-hero {
   padding: 54px 0;
 }
 
 .intake-hero-inner,
-.about-hero-inner {
+.about-hero-inner,
+.image-page-hero-inner {
   display: grid;
   grid-template-columns: minmax(0, .92fr) minmax(320px, .78fr);
   gap: 48px;
@@ -297,7 +299,8 @@ a {
 }
 
 .intake-hero img,
-.about-hero img {
+.about-hero img,
+.image-page-hero img {
   width: 100%;
   aspect-ratio: 16 / 10;
   display: block;
@@ -733,6 +736,19 @@ a {
   font-weight: 700;
   line-height: 1.4;
   letter-spacing: 0;
+  text-transform: none;
+}
+
+.group-request-block .checkbox-field {
+  flex-wrap: wrap;
+}
+
+.group-request-block .checkbox-field small {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.3;
   text-transform: none;
 }
 
@@ -1581,7 +1597,8 @@ a {
   }
 
   .intake-hero-inner,
-  .about-hero-inner {
+  .about-hero-inner,
+  .image-page-hero-inner {
     grid-template-columns: 1fr;
     gap: 28px;
   }
