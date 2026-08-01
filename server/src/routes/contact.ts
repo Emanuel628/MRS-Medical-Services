@@ -19,6 +19,8 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const contactToEmail = process.env.CONTACT_TO_EMAIL || 'dirving.mrsms@gmail.com';
 const contactFromEmail = process.env.CONTACT_FROM_EMAIL || 'M.R.S. Medical Services <onboarding@resend.dev>';
 let databaseReady = false;
+const appointmentConfirmationNote =
+  'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. M.R.S. Medical Services will soon be accepting insurance.';
 
 function cleanField(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -100,9 +102,10 @@ router.post('/', async (request, response) => {
   const phone = cleanField(body.phone);
   const email = cleanField(body.email);
   const message = cleanField(body.message);
+  const requestType = cleanRequestType(cleanField(body.requestType));
 
-  if (!name || !phone || !message) {
-    response.status(400).json({ message: 'Name, phone, and message are required.' });
+  if (!name || !phone || !email || !message) {
+    response.status(400).json({ message: 'Name, phone, email, and message are required.' });
     return;
   }
 
@@ -136,19 +139,43 @@ router.post('/', async (request, response) => {
       from: contactFromEmail,
       to: contactToEmail,
       replyTo,
-      subject: `New M.R.S. Medical Services message from ${name}`,
+      subject: `${requestType === 'intake' ? 'New M.R.S. Medical Services intake request' : 'New M.R.S. Medical Services message'} from ${name}`,
       text: [
-        'New website contact message',
+        requestType === 'intake' ? 'New website intake request' : 'New website contact message',
         '',
         `Name: ${name}`,
         `Phone: ${phone}`,
-        `Email: ${email || 'Not provided'}`,
+        `Email: ${email}`,
         `Submitted: ${submittedAt}`,
         '',
         'Message:',
         message,
       ].join('\n'),
     });
+
+    if (requestType === 'intake') {
+      await resend.emails.send({
+        from: contactFromEmail,
+        to: email,
+        replyTo: contactToEmail,
+        subject: 'M.R.S. Medical Services visit request received',
+        text: [
+          `Hi ${name},`,
+          '',
+          'Your visit request was received.',
+          '',
+          appointmentConfirmationNote,
+          '',
+          `Requested date: ${cleanField(body.preferredDate) || 'Not specified'}`,
+          `Requested time window: ${cleanField(body.preferredTimeWindow) || 'Not specified'}`,
+          '',
+          'M.R.S. Medical Services will follow up to confirm the appointment.',
+          '',
+          'Thank you,',
+          'M.R.S. Medical Services',
+        ].join('\n'),
+      });
+    }
 
     response.json({ message: 'Message sent successfully.' });
   } catch (error) {

@@ -546,7 +546,29 @@ a {
 }
 
 .intake-layout {
+  display: grid;
+  gap: 22px;
   max-width: 900px;
+}
+
+.notice-card {
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--teal);
+  border-radius: 6px;
+  background: #f8fcfd;
+}
+
+.notice-card strong {
+  color: var(--navy-deep);
+  font-size: 16px;
+}
+
+.notice-card p {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .form-grid {
@@ -739,6 +761,40 @@ a {
 
 .form-status-error {
   color: #9f102e;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(11, 41, 69, .56);
+}
+
+.confirmation-modal {
+  width: min(100%, 520px);
+  padding: 32px;
+  border-radius: 6px;
+  background: var(--white);
+  box-shadow: 0 24px 72px rgba(11, 41, 69, .24);
+}
+
+.confirmation-modal h2 {
+  margin: 0 0 14px;
+  color: var(--navy-deep);
+  font: 700 32px / 1.08 Georgia, 'Times New Roman', serif;
+}
+
+.confirmation-modal p {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.confirmation-modal .btn {
+  margin-top: 8px;
 }
 
 .contact-card a {

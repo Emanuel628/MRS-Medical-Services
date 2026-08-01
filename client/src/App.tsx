@@ -89,6 +89,9 @@ const reviews = [
   ],
 ];
 
+const appointmentConfirmationNote =
+  'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. M.R.S. Medical Services will soon be accepting insurance.';
+
 function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/services')) return 'services';
   if (pathname.startsWith('/intake')) return 'intake';
@@ -336,12 +339,12 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap info-grid">
           <article>
             <span className="eyebrow">Payment</span>
-            <h2>Mileage-based payment.</h2>
+            <h2>Payment options are expanding.</h2>
             <p>
-              Visit cost is confirmed before scheduling. Mileage, service location, and collection
-              needs are reviewed before payment is collected.
+              Visit cost is confirmed before scheduling. Service location and collection needs are
+              reviewed before payment is collected.
             </p>
-            <p>Online payment support is planned so confirmed visits can be handled securely.</p>
+            <p>M.R.S. Medical Services will be accepting insurance soon.</p>
           </article>
           <article>
             <span className="eyebrow">Requirements</span>
@@ -562,6 +565,7 @@ function IntakePage() {
   });
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
   const todayKey = getLocalDateKey(new Date());
@@ -646,7 +650,8 @@ function IntakePage() {
       }
 
       setStatus('success');
-      setStatusMessage('Your intake form was sent. M.R.S. Medical Services will follow up soon.');
+      setStatusMessage('Your intake form was sent. Please watch for a confirmation email.');
+      setShowConfirmation(true);
     } catch (error) {
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Intake form could not be sent right now.');
@@ -664,6 +669,11 @@ function IntakePage() {
 
       <section className="section">
         <div className="wrap intake-layout">
+          <div className="notice-card" role="note">
+            <strong>Before choosing a visit time</strong>
+            <p>{appointmentConfirmationNote}</p>
+          </div>
+
           <form className="contact-form intake-form" onSubmit={handleSubmit}>
             <div className="form-grid">
               <label>
@@ -877,6 +887,19 @@ function IntakePage() {
 
         </div>
       </section>
+
+      {showConfirmation && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+            <h2 id="confirmation-title">Visit request received</h2>
+            <p>{appointmentConfirmationNote}</p>
+            <p>A confirmation email has been sent to {form.email}.</p>
+            <button className="btn primary" type="button" onClick={() => setShowConfirmation(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
