@@ -806,16 +806,41 @@ function IntakePage() {
       .filter((blocked) => getScheduleDateKey(blocked.blockDate) === form.requestedDate)
       .map((blocked) => blocked.timeWindow),
   );
+  const isSchedulingForSomeoneElse = form.appointmentFor === 'someone_else';
   const selectedUnavailableWindows = getUnavailableWindows(selectedBlockedWindows, form.hasKit);
   const effectivePatientCount = form.isGroup ? Math.max(2, Math.floor(Number(form.patientCount) || 2)) : 1;
   const effectiveKitCount = form.hasKit ? Math.max(1, Math.floor(Number(form.kitCount) || 1)) : 0;
-  const cardTotal = calculateIntakeTotal(form.requestedDate, form.preferredTimeWindow, effectivePatientCount, effectiveKitCount);
+  const hasValidPatientCount = !form.isGroup || Number(form.patientCount) >= 2;
+  const hasValidKitCount = !form.hasKit || Number(form.kitCount) >= 1;
+  const hasRequiredContactInfo = Boolean(
+    form.fullName &&
+    form.phone &&
+    form.email &&
+    (!isSchedulingForSomeoneElse || (form.patientName && form.relationshipToPatient)) &&
+    (!form.patientIsMinor || form.guardianAuthorization),
+  );
+  const hasRequiredLocationInfo = Boolean(
+    form.streetAddress &&
+    form.town &&
+    form.state &&
+    isServiceableZip(form.zipCode),
+  );
+  const checkoutTotalReady = Boolean(
+    form.requestedDate &&
+    form.preferredTimeWindow &&
+    hasRequiredContactInfo &&
+    hasRequiredLocationInfo &&
+    hasValidPatientCount &&
+    hasValidKitCount,
+  );
+  const cardTotal = checkoutTotalReady
+    ? calculateIntakeTotal(form.requestedDate, form.preferredTimeWindow, effectivePatientCount, effectiveKitCount)
+    : null;
   const missingDate = attemptedSubmit && !form.requestedDate;
   const missingTime = attemptedSubmit && !form.preferredTimeWindow;
   const missingInsurance = attemptedSubmit && form.paymentMethod === 'insurance' &&
     (!form.insuranceProvider || !form.insuranceMemberId || !form.policyholderName);
   const missingTerms = attemptedSubmit && !form.termsAccepted;
-  const isSchedulingForSomeoneElse = form.appointmentFor === 'someone_else';
   const unavailableByDate = blockedTimes.reduce<Record<string, Set<string>>>((availability, blocked) => {
     const key = getScheduleDateKey(blocked.blockDate);
     availability[key] = availability[key] || new Set<string>();
