@@ -980,6 +980,99 @@ a {
   text-transform: uppercase;
 }
 
+.auth-layout {
+  display: flex;
+  justify-content: center;
+}
+
+.auth-card {
+  width: min(100%, 560px);
+  padding: 30px;
+  border: 1px solid var(--border);
+  background: #f8fcfd;
+}
+
+.auth-card h2 {
+  margin: 0 0 18px;
+  color: var(--navy-deep);
+  font: 700 30px / 1.1 Georgia, 'Times New Roman', serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 4px;
+}
+
+.auth-links a {
+  color: var(--teal-dark);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.dashboard-shell {
+  display: grid;
+  gap: 22px;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dashboard-header h2,
+.dashboard-empty h2 {
+  margin: 0;
+  color: var(--navy-deep);
+  font: 700 34px / 1.1 Georgia, 'Times New Roman', serif;
+}
+
+.dashboard-empty {
+  display: grid;
+  gap: 16px;
+  margin: 0 auto;
+}
+
+.dashboard-empty p {
+  margin: 0;
+  color: var(--text);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.dashboard-card {
+  min-height: 150px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  background: var(--white);
+}
+
+.dashboard-card span {
+  display: block;
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.dashboard-card p {
+  margin: 14px 0 0;
+  color: var(--navy-deep);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
 .admin-layout {
   display: grid;
   grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr);
@@ -1105,6 +1198,38 @@ a {
   gap: 18px;
 }
 
+.social-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.social-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--navy-deep);
+  background: var(--white);
+  transition: border-color .2s ease, color .2s ease, transform .2s ease;
+}
+
+.social-links a:hover,
+.social-links a:focus-visible {
+  border-color: var(--teal);
+  color: var(--teal-dark);
+  transform: translateY(-1px);
+}
+
+.social-links svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+
 .footer strong {
   color: var(--navy-deep);
 }
@@ -1169,6 +1294,7 @@ a {
   .reviews-layout,
   .form-layout,
   .admin-layout,
+  .dashboard-grid,
   .schedule-grid,
   .time-slot-grid,
   .form-grid {
@@ -1201,6 +1327,15 @@ a {
   .footer-links {
     align-items: flex-start;
   }
+
+  .social-links {
+    order: 3;
+  }
+
+  .dashboard-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 520px) {
@@ -1227,6 +1362,15 @@ a {
 
   .booking-calendar {
     padding: 14px;
+  }
+
+  .auth-card {
+    padding: 24px;
+  }
+
+  .auth-links {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .benefits article {

@@ -1,6 +1,19 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
-type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin' | 'cancel' | 'confirm' | 'accessibility';
+type PageKey =
+  | 'home'
+  | 'services'
+  | 'about'
+  | 'contact'
+  | 'intake'
+  | 'admin'
+  | 'login'
+  | 'register'
+  | 'forgot'
+  | 'dashboard'
+  | 'cancel'
+  | 'confirm'
+  | 'accessibility';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
@@ -143,7 +156,11 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/intake')) return 'intake';
   if (pathname.startsWith('/about')) return 'about';
   if (pathname.startsWith('/contact')) return 'contact';
-  if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/admin')) return 'login';
+  if (pathname.startsWith('/login')) return 'login';
+  if (pathname.startsWith('/register')) return 'register';
+  if (pathname.startsWith('/forgot-password')) return 'forgot';
+  if (pathname.startsWith('/dashboard')) return 'dashboard';
   if (pathname.startsWith('/cancel')) return 'cancel';
   if (pathname.startsWith('/confirm')) return 'confirm';
   if (pathname.startsWith('/accessibility')) return 'accessibility';
@@ -194,8 +211,25 @@ function Footer({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     <footer className="footer">
       <div className="wrap footer-inner">
         <div>
-          <strong>M.R.S. Medical Services™</strong>
-          <p>© {year} M.R.S. Medical Services. All rights reserved.</p>
+          <strong>M.R.S. Medical Services&trade;</strong>
+          <p>&copy; {year} M.R.S. Medical Services. All rights reserved.</p>
+        </div>
+        <div className="social-links" aria-label="Social media links">
+          <a href="https://www.facebook.com/" target="_blank" rel="noreferrer" aria-label="Facebook">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 8.4V6.8c0-.8.5-1.3 1.4-1.3H17V2.7c-.8-.1-1.7-.2-2.4-.2-2.5 0-4.2 1.5-4.2 4.1v1.8H7.6v3.2h2.8v8h3.6v-8h2.7l.5-3.2H14Z" />
+            </svg>
+          </a>
+          <a href="https://www.instagram.com/" target="_blank" rel="noreferrer" aria-label="Instagram">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7.7 2.8h8.6a4.9 4.9 0 0 1 4.9 4.9v8.6a4.9 4.9 0 0 1-4.9 4.9H7.7a4.9 4.9 0 0 1-4.9-4.9V7.7a4.9 4.9 0 0 1 4.9-4.9Zm0 2A2.9 2.9 0 0 0 4.8 7.7v8.6a2.9 2.9 0 0 0 2.9 2.9h8.6a2.9 2.9 0 0 0 2.9-2.9V7.7a2.9 2.9 0 0 0-2.9-2.9H7.7Zm4.3 3.1a4.1 4.1 0 1 1 0 8.2 4.1 4.1 0 0 1 0-8.2Zm0 2a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2Zm4.4-2.6a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z" />
+            </svg>
+          </a>
+          <a href="https://www.linkedin.com/" target="_blank" rel="noreferrer" aria-label="LinkedIn">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6.7 8.8v10.4H3.4V8.8h3.3ZM5.1 3.7a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8Zm7.2 5.1.1 1.4c.8-1.1 1.9-1.7 3.3-1.7 2.4 0 4 1.6 4 4.8v5.9h-3.4v-5.5c0-1.4-.6-2.2-1.8-2.2-1 0-1.7.6-2.1 1.4v6.3H9V8.8h3.3Z" />
+            </svg>
+          </a>
         </div>
         <div className="footer-links">
           <a
@@ -210,10 +244,10 @@ function Footer({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           </a>
           <a
             className="admin-link"
-            href="/admin"
+            href="/login"
             onClick={(event) => {
               event.preventDefault();
-              onNavigate('admin');
+              onNavigate('login');
             }}
           >
             Admin
@@ -904,9 +938,9 @@ function IntakePage() {
                   value={form.streetAddress}
                   onChange={(event) => setForm({ ...form, streetAddress: event.target.value })}
                   autoComplete="address-line1"
+                  placeholder="Home, job, office, facility, or approved care setting."
                   required
                 />
-                <span className="field-help">Home, job, office, facility, or approved care setting.</span>
               </label>
               <label>
                 Address details
@@ -1358,6 +1392,241 @@ function AccessibilityPage() {
             please call <a href="tel:+19084637457">(908) 463-7457</a> or email{' '}
             <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a>.
           </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('sending');
+    setStatusMessage('');
+
+    try {
+      const response = await fetch('/api/admin/schedule', {
+        headers: { 'x-admin-password': password },
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Unable to sign in. Check the admin password and try again.');
+      }
+
+      window.sessionStorage.setItem('mrsAdminPassword', password);
+      setStatus('success');
+      setStatusMessage('Signed in.');
+      onNavigate('dashboard');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to sign in right now.');
+    }
+  };
+
+  return (
+    <main>
+      <PageHero title="Admin login.">
+        <p>Access the M.R.S. Medical Services control center.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap auth-layout">
+          <form className="contact-form auth-card" onSubmit={handleLogin}>
+            <h2>Sign in</h2>
+            <label>
+              Admin password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <button className="btn primary" type="submit" disabled={status === 'sending'}>
+              {status === 'sending' ? 'Signing in...' : 'Login'}
+            </button>
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+            <div className="auth-links">
+              <a
+                href="/register"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate('register');
+                }}
+              >
+                Register
+              </a>
+              <a
+                href="/forgot-password"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate('forgot');
+                }}
+              >
+                Forgot password?
+              </a>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function RegisterPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const [statusMessage, setStatusMessage] = useState('');
+
+  const handleRegister = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatusMessage(
+      'Admin account creation is not active yet. Full account security will be added when the dashboard controls are finalized.',
+    );
+  };
+
+  return (
+    <main>
+      <PageHero title="Register.">
+        <p>Admin access will be limited to approved M.R.S. Medical Services users.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap auth-layout">
+          <form className="contact-form auth-card" onSubmit={handleRegister}>
+            <h2>Create admin access</h2>
+            <div className="form-grid">
+              <label>
+                Full name
+                <input autoComplete="name" required />
+              </label>
+              <label>
+                Email
+                <input type="email" autoComplete="email" required />
+              </label>
+            </div>
+            <button className="btn primary" type="submit">Request Access</button>
+            {statusMessage && <p className="form-status" role="status">{statusMessage}</p>}
+            <div className="auth-links">
+              <a
+                href="/login"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate('login');
+                }}
+              >
+                Back to login
+              </a>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ForgotPasswordPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const [statusMessage, setStatusMessage] = useState('');
+
+  const handleReset = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatusMessage('Password reset email is not active yet. Use the current Railway admin password for now.');
+  };
+
+  return (
+    <main>
+      <PageHero title="Forgot password.">
+        <p>Admin password recovery will be connected when the full account system is added.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap auth-layout">
+          <form className="contact-form auth-card" onSubmit={handleReset}>
+            <h2>Reset access</h2>
+            <label>
+              Admin email
+              <input type="email" autoComplete="email" required />
+            </label>
+            <button className="btn primary" type="submit">Send Reset Link</button>
+            {statusMessage && <p className="form-status" role="status">{statusMessage}</p>}
+            <div className="auth-links">
+              <a
+                href="/login"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate('login');
+                }}
+              >
+                Back to login
+              </a>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function DashboardPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const hasSession = Boolean(window.sessionStorage.getItem('mrsAdminPassword'));
+  const dashboardItems = [
+    ['Messages', 'Review website contact messages and follow-up needs.'],
+    ['Visit Requests', 'See new intake requests, patient details, and requested times.'],
+    ['Schedule', 'Confirm appointments and block unavailable dates or times.'],
+    ['Reminders', 'Track patient confirmation emails and upcoming visits.'],
+    ['Billing', 'Prepare for Stripe, insurance, and pay-at-visit workflows.'],
+    ['Website', 'Keep service details, contact information, and public notices current.'],
+  ];
+
+  return (
+    <main>
+      <PageHero title="Dashboard.">
+        <p>M.R.S. Medical Services control center.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap dashboard-shell">
+          {!hasSession ? (
+            <div className="auth-card dashboard-empty">
+              <h2>Login required</h2>
+              <p>Sign in before opening the control center.</p>
+              <button className="btn primary" type="button" onClick={() => onNavigate('login')}>
+                Go to Login
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="dashboard-header">
+                <h2>Control Center</h2>
+                <button
+                  className="btn secondary"
+                  type="button"
+                  onClick={() => {
+                    window.sessionStorage.removeItem('mrsAdminPassword');
+                    onNavigate('login');
+                  }}
+                >
+                  Sign Out
+                </button>
+              </div>
+              <div className="dashboard-grid">
+                {dashboardItems.map(([title, description]) => (
+                  <article className="dashboard-card" key={title}>
+                    <span>{title}</span>
+                    <p>{description}</p>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
     </main>
@@ -2014,11 +2283,21 @@ export default function App() {
 
   const navigate = (page: PageKey) => {
     const item = navItems.find((navItem) => navItem.key === page);
-    if (!item && page !== 'cancel' && page !== 'confirm' && page !== 'accessibility') return;
-    const path = item?.path || (page === 'confirm' ? '/confirm' : page === 'accessibility' ? '/accessibility' : '/cancel');
+    const standalonePaths: Partial<Record<PageKey, string>> = {
+      admin: '/login',
+      cancel: '/cancel',
+      confirm: '/confirm',
+      accessibility: '/accessibility',
+      login: '/login',
+      register: '/register',
+      forgot: '/forgot-password',
+      dashboard: '/dashboard',
+    };
+    const path = item?.path || standalonePaths[page];
+    if (!path) return;
     window.history.pushState(null, '', path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    setActivePage(page);
+    setActivePage(page === 'admin' ? 'login' : page);
   };
 
   return (
@@ -2030,6 +2309,10 @@ export default function App() {
         {activePage === 'intake' && <IntakePage />}
         {activePage === 'about' && <AboutPage onNavigate={navigate} />}
         {activePage === 'contact' && <ContactPage />}
+        {activePage === 'login' && <LoginPage onNavigate={navigate} />}
+        {activePage === 'register' && <RegisterPage onNavigate={navigate} />}
+        {activePage === 'forgot' && <ForgotPasswordPage onNavigate={navigate} />}
+        {activePage === 'dashboard' && <DashboardPage onNavigate={navigate} />}
         {activePage === 'admin' && <AdminPage />}
         {activePage === 'cancel' && <CancelPage />}
         {activePage === 'confirm' && <ConfirmAppointmentPage />}
