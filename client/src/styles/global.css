@@ -1014,6 +1014,75 @@ a {
   text-decoration: none;
 }
 
+.password-meter {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbe7ea;
+}
+
+.password-meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #b70f1e;
+  transition: width .2s ease, background .2s ease;
+}
+
+.password-meter.score-1 span {
+  width: 20%;
+}
+
+.password-meter.score-2 span {
+  width: 40%;
+}
+
+.password-meter.score-3 span {
+  width: 60%;
+  background: #c27a00;
+}
+
+.password-meter.score-4 span {
+  width: 80%;
+  background: var(--teal);
+}
+
+.password-meter.score-5 span {
+  width: 100%;
+  background: #087a55;
+}
+
+.password-requirements {
+  display: grid;
+  gap: 7px;
+  margin: -4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.password-requirements li {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.password-requirements li::before {
+  content: '○';
+  margin-right: 8px;
+  color: #b70f1e;
+}
+
+.password-requirements li.met::before {
+  content: '✓';
+  color: var(--teal-dark);
+}
+
+.auth-decision-card {
+  max-width: 520px;
+  position: static;
+  transform: none;
+}
+
 .dashboard-shell {
   display: grid;
   gap: 22px;

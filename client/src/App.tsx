@@ -11,6 +11,7 @@ type PageKey =
   | 'register'
   | 'forgot'
   | 'dashboard'
+  | 'adminRegistration'
   | 'cancel'
   | 'confirm'
   | 'accessibility';
@@ -150,12 +151,49 @@ const reviews = [
 
 const appointmentConfirmationNote =
   'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. Appointments must be canceled at least 24 hours in advance.';
+const adminSessionTokenKey = 'mrsAdminToken';
+const adminSessionExpiryKey = 'mrsAdminTokenExpiresAt';
+const inactivityLimitMs = 15 * 60 * 1000;
+
+function getAdminToken() {
+  const token = window.sessionStorage.getItem(adminSessionTokenKey);
+  const expiresAt = window.sessionStorage.getItem(adminSessionExpiryKey);
+  if (!token || !expiresAt || Date.parse(expiresAt) <= Date.now()) {
+    window.sessionStorage.removeItem(adminSessionTokenKey);
+    window.sessionStorage.removeItem(adminSessionExpiryKey);
+    return '';
+  }
+  return token;
+}
+
+function clearAdminSession() {
+  window.sessionStorage.removeItem(adminSessionTokenKey);
+  window.sessionStorage.removeItem(adminSessionExpiryKey);
+  window.sessionStorage.removeItem('mrsAdminPassword');
+}
+
+function getPasswordScore(value: string) {
+  return [
+    value.length >= 12,
+    /[a-z]/.test(value),
+    /[A-Z]/.test(value),
+    /\d/.test(value),
+    /[^A-Za-z0-9]/.test(value),
+  ].filter(Boolean).length;
+}
+
+function getPasswordStrengthLabel(score: number) {
+  if (score <= 2) return 'Weak';
+  if (score <= 4) return 'Good';
+  return 'Strong';
+}
 
 function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/services')) return 'services';
   if (pathname.startsWith('/intake')) return 'intake';
   if (pathname.startsWith('/about')) return 'about';
   if (pathname.startsWith('/contact')) return 'contact';
+  if (pathname.startsWith('/admin-registration')) return 'adminRegistration';
   if (pathname.startsWith('/admin')) return 'login';
   if (pathname.startsWith('/login')) return 'login';
   if (pathname.startsWith('/register')) return 'register';
@@ -1399,6 +1437,7 @@ function AccessibilityPage() {
 }
 
 function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
@@ -1409,16 +1448,23 @@ function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     setStatusMessage('');
 
     try {
-      const response = await fetch('/api/admin/schedule', {
-        headers: { 'x-admin-password': password },
+      const response = await fetch('/api/admin/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       });
-      const result = (await response.json().catch(() => ({}))) as { message?: string };
+      const result = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        token?: string;
+        expiresAt?: string;
+      };
 
       if (!response.ok) {
-        throw new Error(result.message || 'Unable to sign in. Check the admin password and try again.');
+        throw new Error(result.message || 'Unable to sign in. Check your email and password and try again.');
       }
 
-      window.sessionStorage.setItem('mrsAdminPassword', password);
+      window.sessionStorage.setItem(adminSessionTokenKey, result.token || '');
+      window.sessionStorage.setItem(adminSessionExpiryKey, result.expiresAt || new Date(Date.now() + inactivityLimitMs).toISOString());
       setStatus('success');
       setStatusMessage('Signed in.');
       onNavigate('dashboard');
@@ -1439,7 +1485,17 @@ function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           <form className="contact-form auth-card" onSubmit={handleLogin}>
             <h2>Sign in</h2>
             <label>
-              Admin password
+              Email
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                required
+              />
+            </label>
+            <label>
+              Password
               <input
                 type="password"
                 value={password}
@@ -1484,13 +1540,38 @@ function LoginPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 }
 
 function RegisterPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
+  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
+  const passwordScore = getPasswordScore(form.password);
+  const passwordRequirements = [
+    ['At least 12 characters', form.password.length >= 12],
+    ['One lowercase letter', /[a-z]/.test(form.password)],
+    ['One uppercase letter', /[A-Z]/.test(form.password)],
+    ['One number', /\d/.test(form.password)],
+    ['One symbol', /[^A-Za-z0-9]/.test(form.password)],
+  ] as const;
 
-  const handleRegister = (event: FormEvent<HTMLFormElement>) => {
+  const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setStatusMessage(
-      'Admin account creation is not active yet. Full account security will be added when the dashboard controls are finalized.',
-    );
+    setStatus('sending');
+    setStatusMessage('');
+
+    try {
+      const response = await fetch('/api/admin/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(result.message || 'Account request could not be sent.');
+      setStatus('success');
+      setStatusMessage(result.message || 'Account request sent for approval.');
+      setForm({ email: '', password: '', confirmPassword: '' });
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Account request could not be sent.');
+    }
   };
 
   return (
@@ -1503,18 +1584,52 @@ function RegisterPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap auth-layout">
           <form className="contact-form auth-card" onSubmit={handleRegister}>
             <h2>Create admin access</h2>
-            <div className="form-grid">
-              <label>
-                Full name
-                <input autoComplete="name" required />
-              </label>
-              <label>
-                Email
-                <input type="email" autoComplete="email" required />
-              </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+                autoComplete="email"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm({ ...form, password: event.target.value })}
+                autoComplete="new-password"
+                required
+              />
+            </label>
+            <div className={`password-meter score-${passwordScore}`} aria-label={`Password strength: ${getPasswordStrengthLabel(passwordScore)}`}>
+              <span />
             </div>
-            <button className="btn primary" type="submit">Request Access</button>
-            {statusMessage && <p className="form-status" role="status">{statusMessage}</p>}
+            <ul className="password-requirements">
+              {passwordRequirements.map(([label, met]) => (
+                <li className={met ? 'met' : ''} key={label}>{label}</li>
+              ))}
+            </ul>
+            <label>
+              Confirm password
+              <input
+                type="password"
+                value={form.confirmPassword}
+                onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
+                autoComplete="new-password"
+                required
+              />
+            </label>
+            <button className="btn primary" type="submit" disabled={status === 'sending'}>
+              {status === 'sending' ? 'Sending...' : 'Request Access'}
+            </button>
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
             <div className="auth-links">
               <a
                 href="/login"
@@ -1575,8 +1690,97 @@ function ForgotPasswordPage({ onNavigate }: { onNavigate: (page: PageKey) => voi
   );
 }
 
+function AdminRegistrationDecisionPage() {
+  const token = new URLSearchParams(window.location.search).get('token') || '';
+  const [requestDetails, setRequestDetails] = useState<{ email: string; status: string; requestedAt: string } | null>(null);
+  const [status, setStatus] = useState<'loading' | 'idle' | 'sending' | 'success' | 'error'>('loading');
+  const [statusMessage, setStatusMessage] = useState('');
+
+  useEffect(() => {
+    if (!token) {
+      setStatus('error');
+      setStatusMessage('Account request token is missing.');
+      return;
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/admin/auth/registration/${encodeURIComponent(token)}`);
+        const result = (await response.json().catch(() => ({}))) as {
+          message?: string;
+          request?: { email: string; status: string; requestedAt: string };
+        };
+        if (!response.ok || !result.request) throw new Error(result.message || 'Account request could not be loaded.');
+        setRequestDetails(result.request);
+        setStatus('idle');
+      } catch (error) {
+        setStatus('error');
+        setStatusMessage(error instanceof Error ? error.message : 'Account request could not be loaded.');
+      }
+    })();
+  }, [token]);
+
+  const decide = async (decision: 'approve' | 'deny') => {
+    setStatus('sending');
+    setStatusMessage('');
+
+    try {
+      const response = await fetch(`/api/admin/auth/registration/${encodeURIComponent(token)}/decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(result.message || 'Account request could not be updated.');
+      setStatus('success');
+      setStatusMessage(result.message || 'Account request updated.');
+      setRequestDetails((current) => current ? { ...current, status: decision === 'approve' ? 'approved' : 'denied' } : current);
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Account request could not be updated.');
+    }
+  };
+
+  return (
+    <main>
+      <PageHero title="Admin request.">
+        <p>Review the account request before granting access.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap auth-layout">
+          <div className="confirmation-modal auth-decision-card" role="dialog" aria-modal="true" aria-labelledby="admin-request-title">
+            <h2 id="admin-request-title">Confirm admin access</h2>
+            {requestDetails ? (
+              <>
+                <p><strong>Email:</strong> {requestDetails.email}</p>
+                <p><strong>Status:</strong> {requestDetails.status}</p>
+                <div className="modal-actions">
+                  <button className="btn primary" type="button" onClick={() => void decide('approve')} disabled={status === 'sending' || requestDetails.status !== 'pending'}>
+                    Approve
+                  </button>
+                  <button className="btn secondary" type="button" onClick={() => void decide('deny')} disabled={status === 'sending' || requestDetails.status !== 'pending'}>
+                    Deny
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p>{status === 'loading' ? 'Loading account request...' : statusMessage}</p>
+            )}
+            {statusMessage && requestDetails && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function DashboardPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
-  const hasSession = Boolean(window.sessionStorage.getItem('mrsAdminPassword'));
+  const hasSession = Boolean(getAdminToken());
   const dashboardItems = [
     ['Messages', 'Review website contact messages and follow-up needs.'],
     ['Visit Requests', 'See new intake requests, patient details, and requested times.'],
@@ -1610,7 +1814,11 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) 
                   className="btn secondary"
                   type="button"
                   onClick={() => {
-                    window.sessionStorage.removeItem('mrsAdminPassword');
+                    const token = getAdminToken();
+                    if (token) {
+                      void fetch('/api/admin/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+                    }
+                    clearAdminSession();
                     onNavigate('login');
                   }}
                 >
@@ -2281,6 +2489,27 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
+  useEffect(() => {
+    let timeoutId = window.setTimeout(() => undefined, inactivityLimitMs);
+    const resetTimer = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        if (getAdminToken()) {
+          clearAdminSession();
+          setActivePage('login');
+          window.history.pushState(null, '', '/login');
+        }
+      }, inactivityLimitMs);
+    };
+    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+    events.forEach((eventName) => window.addEventListener(eventName, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      window.clearTimeout(timeoutId);
+      events.forEach((eventName) => window.removeEventListener(eventName, resetTimer));
+    };
+  }, []);
+
   const navigate = (page: PageKey) => {
     const item = navItems.find((navItem) => navItem.key === page);
     const standalonePaths: Partial<Record<PageKey, string>> = {
@@ -2292,6 +2521,7 @@ export default function App() {
       register: '/register',
       forgot: '/forgot-password',
       dashboard: '/dashboard',
+      adminRegistration: '/admin-registration',
     };
     const path = item?.path || standalonePaths[page];
     if (!path) return;
@@ -2312,6 +2542,7 @@ export default function App() {
         {activePage === 'login' && <LoginPage onNavigate={navigate} />}
         {activePage === 'register' && <RegisterPage onNavigate={navigate} />}
         {activePage === 'forgot' && <ForgotPasswordPage onNavigate={navigate} />}
+        {activePage === 'adminRegistration' && <AdminRegistrationDecisionPage />}
         {activePage === 'dashboard' && <DashboardPage onNavigate={navigate} />}
         {activePage === 'admin' && <AdminPage />}
         {activePage === 'cancel' && <CancelPage />}
