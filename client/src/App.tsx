@@ -22,7 +22,7 @@ type PageKey =
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
   { key: 'services', label: 'Services', path: '/services' },
-  { key: 'intake', label: 'Intake', path: '/intake' },
+  { key: 'intake', label: 'Appointments', path: '/intake' },
   { key: 'about', label: 'About', path: '/about' },
   { key: 'contact', label: 'Contact', path: '/contact' },
 ];
@@ -472,7 +472,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap cta-inner">
           <div>
             <h3>Need a mobile blood draw?</h3>
-            <p>Start with the intake form and M.R.S. will follow up to confirm timing.</p>
+            <p>Start with the appointment form and M.R.S. will follow up to confirm timing.</p>
           </div>
           <button className="btn teal" type="button" onClick={() => onNavigate('intake')}>
             Request Visit
@@ -666,7 +666,7 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap cta-inner">
           <div>
             <h3>Have a general question?</h3>
-            <p>Use the contact page for questions that are not ready for intake.</p>
+            <p>Use the contact page for questions that are not ready for an appointment request.</p>
           </div>
           <button className="btn teal" type="button" onClick={() => onNavigate('contact')}>
             Contact Us
@@ -713,7 +713,7 @@ function ContactPage() {
     <main>
       <PageHero title="Contact M.R.S. Medical Services.">
         <p>
-          Send a general question or ask for help before using the intake form.
+          Send a general question or ask for help before using the appointment form.
         </p>
       </PageHero>
 
@@ -774,7 +774,7 @@ function ContactPage() {
             <p><strong>Email:</strong> <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a></p>
             <p><strong>Hours:</strong> Monday-Friday, 6 AM-2 PM</p>
             <p>
-              For visit requests, use the intake page so the calendar, location, and required
+              For visit requests, use the appointment page so the calendar, location, and required
               paperwork can be reviewed together.
             </p>
           </aside>
@@ -798,6 +798,7 @@ function IntakePage() {
     preferredLab: '',
     requestedDate: '',
     preferredTimeWindow: '',
+    isGroup: false,
     patientCount: 1,
     prescriptionReady: false,
     hasKit: false,
@@ -827,7 +828,8 @@ function IntakePage() {
       .map((blocked) => blocked.timeWindow),
   );
   const selectedUnavailableWindows = getUnavailableWindows(selectedBlockedWindows, form.hasKit);
-  const cardTotal = calculateIntakeTotal(form.zipCode, form.requestedDate, form.preferredTimeWindow, form.patientCount);
+  const effectivePatientCount = form.isGroup ? form.patientCount : 1;
+  const cardTotal = calculateIntakeTotal(form.zipCode, form.requestedDate, form.preferredTimeWindow, effectivePatientCount);
   const missingDate = attemptedSubmit && !form.requestedDate;
   const missingTime = attemptedSubmit && !form.preferredTimeWindow;
   const missingInsurance = attemptedSubmit && form.paymentMethod === 'insurance' &&
@@ -939,7 +941,7 @@ function IntakePage() {
 
     if (!isAdultPatient(form.dateOfBirth)) {
       setStatus('error');
-      setStatusMessage('Patients must be 19 or older to schedule through the intake form.');
+      setStatusMessage('Patients must be 19 or older to schedule through the appointment form.');
       return;
     }
 
@@ -969,10 +971,10 @@ function IntakePage() {
     }
 
     setStatus('sending');
-    setStatusMessage(form.paymentMethod === 'card' ? 'Preparing secure checkout...' : 'Sending your intake form...');
+    setStatusMessage(form.paymentMethod === 'card' ? 'Preparing secure checkout...' : 'Sending your appointment form...');
 
     const message = [
-      'Patient intake request',
+      'Appointment request',
       '',
       `Patient name: ${form.fullName}`,
       `Date of birth: ${form.dateOfBirth}`,
@@ -986,7 +988,8 @@ function IntakePage() {
       `Preferred lab: ${form.preferredLab || 'Not specified'}`,
       `Requested date: ${form.requestedDate || 'Not specified'}`,
       `Preferred time window: ${form.preferredTimeWindow || 'Not specified'}`,
-      `Number of people: ${form.patientCount}`,
+      `Group appointment: ${form.isGroup ? 'Yes' : 'No'}`,
+      `Number of people: ${effectivePatientCount}`,
       `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
       `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
       `Payment method: ${form.paymentMethod === 'insurance' ? 'Insurance' : form.paymentMethod === 'pay_at_site' ? 'Pay at site' : 'Card checkout'}`,
@@ -1025,7 +1028,7 @@ function IntakePage() {
           state: form.state,
           preferredLab: form.preferredLab,
           prescriptionReady: form.prescriptionReady,
-          patientCount: form.patientCount,
+          patientCount: effectivePatientCount,
           paymentMethod: form.paymentMethod,
           insuranceProvider: form.insuranceProvider,
           insuranceMemberId: form.insuranceMemberId,
@@ -1039,7 +1042,7 @@ function IntakePage() {
       const result = (await response.json().catch(() => ({}))) as { message?: string; checkoutUrl?: string };
 
       if (!response.ok) {
-        throw new Error(result.message || 'Intake form could not be sent right now.');
+        throw new Error(result.message || 'Appointment form could not be sent right now.');
       }
 
       if (result.checkoutUrl) {
@@ -1054,12 +1057,12 @@ function IntakePage() {
       }
 
       setStatus('success');
-      setStatusMessage('Your intake form was sent. Please watch for a confirmation email.');
+      setStatusMessage('Your appointment form was sent. Please watch for a confirmation email.');
       setAttemptedSubmit(false);
       setShowConfirmation(true);
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Intake form could not be sent right now.');
+      setStatusMessage(error instanceof Error ? error.message : 'Appointment form could not be sent right now.');
     }
   };
 
@@ -1068,10 +1071,9 @@ function IntakePage() {
       <section className="page-hero intake-hero">
         <div className="wrap intake-hero-inner">
           <div>
-            <h1>Patient intake form.</h1>
+            <h1>Appointment request.</h1>
             <p>
-              Send the details for the visit. M.R.S. will review the route, timing, and paperwork before
-              confirming an appointment.
+              Send the visit details, choose a payment method, and complete checkout when paying by card.
             </p>
           </div>
           <img src="/images/intake-consultation.png" alt="Mobile phlebotomy intake review" />
@@ -1093,7 +1095,7 @@ function IntakePage() {
           >
             <div className="intake-columns">
               <section className="intake-panel" aria-labelledby="patient-info-title">
-                <h2 id="patient-info-title">Patient info</h2>
+                <h2 id="patient-info-title">Scheduling contact</h2>
             <div className="form-grid">
               <label>
                 Full name
@@ -1211,18 +1213,37 @@ function IntakePage() {
                   required
                 />
               </label>
-              <label className="zip-subfield">
-                Number of people
-                <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={form.patientCount}
-                  onFocus={(event) => event.currentTarget.select()}
-                  onChange={(event) => setForm({ ...form, patientCount: Math.max(1, Number(event.target.value) || 1) })}
-                  required
-                />
-              </label>
+              <div className="group-request-block">
+                <label className="checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={form.isGroup}
+                    onChange={(event) => setForm({
+                      ...form,
+                      isGroup: event.target.checked,
+                      patientCount: event.target.checked ? Math.max(2, form.patientCount) : 1,
+                    })}
+                  />
+                  <span>Group</span>
+                </label>
+                {form.isGroup && (
+                  <>
+                    <label>
+                      Number of people
+                      <input
+                        type="number"
+                        min={2}
+                        max={12}
+                        value={form.patientCount}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onChange={(event) => setForm({ ...form, patientCount: Math.max(2, Number(event.target.value) || 2) })}
+                        required
+                      />
+                    </label>
+                    <p className="field-help group-help">Additional group member information will be collected on site.</p>
+                  </>
+                )}
+              </div>
               <label>
                 Preferred lab
                 <select

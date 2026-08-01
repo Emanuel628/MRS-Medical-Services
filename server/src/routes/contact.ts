@@ -328,11 +328,14 @@ function renderIntakeNotificationEmail({
     [cleanField(body.town), cleanField(body.state), cleanField(body.zipCode)].filter(Boolean).join(', '),
   ].filter(Boolean);
   const notes = cleanField(body.notes) || 'None';
+  const patientCount = cleanOptionalNumber(body.patientCount) || 1;
   const rows = [
-    ['Patient name', cleanField(body.name)],
+    ['Scheduling contact', cleanField(body.name)],
     ['Date of birth', formatAppointmentDate(cleanField(body.dateOfBirth))],
     ['Phone', cleanField(body.phone)],
     ['Email', cleanField(body.email) || 'Not provided'],
+    ['Group appointment', patientCount > 1 ? 'Yes' : 'No'],
+    ['Number of people', String(patientCount)],
     ['Preferred lab', cleanField(body.preferredLab) || 'Not specified'],
     ['Prescription/order ready', body.prescriptionReady ? 'Yes' : 'No'],
     ['Specialty kit', body.hasKit ? 'Yes' : 'No'],
@@ -348,7 +351,7 @@ function renderIntakeNotificationEmail({
       <div style="max-width:680px; margin:0 auto; padding:34px 18px; font-family:Arial, Helvetica, sans-serif; color:#173044;">
         <div style="background:#ffffff; border:1px solid #dbe7ea; border-radius:8px; overflow:hidden;">
           <div style="padding:28px 30px; background:#062948; color:#ffffff;">
-            <p style="margin:0 0 8px; color:#7ed6da; font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;">New intake request</p>
+            <p style="margin:0 0 8px; color:#7ed6da; font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;">New appointment request</p>
             <h1 style="margin:0; font-family:Georgia, 'Times New Roman', serif; font-size:31px; line-height:1.12;">${escapeHtml(appointmentDate)}</h1>
             <p style="margin:10px 0 0; font-size:19px; line-height:1.35;">${escapeHtml(appointmentTime)}</p>
           </div>
@@ -360,7 +363,7 @@ function renderIntakeNotificationEmail({
             </div>
 
             <div style="margin:0 0 26px;">
-              <h2 style="margin:0 0 14px; color:#062948; font-size:18px;">Patient information</h2>
+              <h2 style="margin:0 0 14px; color:#062948; font-size:18px;">Scheduling contact</h2>
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
                 ${rows.map(([label, value]) => `
                   <tr>
@@ -387,7 +390,7 @@ function renderIntakeNotificationEmail({
   `;
 
   const text = [
-    'New intake request',
+    'New appointment request',
     '',
     `Appointment date: ${appointmentDate}`,
     `Appointment time: ${appointmentTime}`,
