@@ -807,7 +807,7 @@ function IntakePage() {
     requestedDate: '',
     preferredTimeWindow: '',
     isGroup: false,
-    patientCount: 1,
+    patientCount: '1',
     prescriptionReady: false,
     hasKit: false,
     paymentMethod: 'card',
@@ -836,7 +836,7 @@ function IntakePage() {
       .map((blocked) => blocked.timeWindow),
   );
   const selectedUnavailableWindows = getUnavailableWindows(selectedBlockedWindows, form.hasKit);
-  const effectivePatientCount = form.isGroup ? form.patientCount : 1;
+  const effectivePatientCount = form.isGroup ? Math.max(2, Math.floor(Number(form.patientCount) || 2)) : 1;
   const cardTotal = calculateIntakeTotal(form.zipCode, form.requestedDate, form.preferredTimeWindow, effectivePatientCount);
   const missingDate = attemptedSubmit && !form.requestedDate;
   const missingTime = attemptedSubmit && !form.preferredTimeWindow;
@@ -1229,10 +1229,10 @@ function IntakePage() {
                     onChange={(event) => setForm({
                       ...form,
                       isGroup: event.target.checked,
-                      patientCount: event.target.checked ? Math.max(2, form.patientCount) : 1,
+                      patientCount: event.target.checked ? String(Math.max(2, Number(form.patientCount) || 2)) : '1',
                     })}
                   />
-                  <span>Group</span>
+                  <span>Groups:</span>
                   <small>For more than 1 patient.</small>
                 </label>
                 {form.isGroup && (
@@ -1242,10 +1242,13 @@ function IntakePage() {
                       <input
                         type="number"
                         min={2}
-                        max={12}
                         value={form.patientCount}
                         onFocus={(event) => event.currentTarget.select()}
-                        onChange={(event) => setForm({ ...form, patientCount: Math.max(2, Number(event.target.value) || 2) })}
+                        onChange={(event) => setForm({ ...form, patientCount: event.target.value.replace(/\D/g, '') })}
+                        onBlur={() => setForm((currentForm) => ({
+                          ...currentForm,
+                          patientCount: String(Math.max(2, Number(currentForm.patientCount) || 2)),
+                        }))}
                         required
                       />
                     </label>
@@ -1886,13 +1889,14 @@ function TermsPage() {
         <div className="wrap content-block legal-content">
           <h2>Service scope</h2>
           <p>
-            M.R.S. Medical Services provides mobile specimen collection support. The website is not for
-            emergencies, urgent medical advice, diagnosis, or treatment decisions. Call 911 or seek emergency
-            care for urgent health concerns.
+            M.R.S. Medical Services provides mobile specimen collection support. This website is not for
+            emergencies, urgent medical advice, diagnosis, treatment decisions, or lab-result interpretation.
+            Call 911 or seek emergency care for urgent health concerns.
           </p>
           <p>
-            Patients are responsible for having any required lab order, prescription, kit, provider instruction,
-            identification, and accurate visit information available at the appointment.
+            The scheduling contact is responsible for submitting accurate visit details and having any required
+            lab order, prescription, kit, provider instruction, identification, and payment method available at
+            the appointment.
           </p>
 
           <h2>Scheduling and payment</h2>
@@ -1902,8 +1906,13 @@ function TermsPage() {
           </p>
           <p>
             Pricing is calculated from submitted appointment details, including service address, requested time,
-            date, and number of patients. Some requests may require direct review if the location or visit details
-            are outside the standard service rules.
+            date, and group size when applicable. Group appointments may be scheduled by one contact person;
+            additional group member information is collected on site.
+          </p>
+          <p>
+            Some requests may require direct review if the location, order, kit, group size, or visit details
+            are outside the standard service rules. M.R.S. Medical Services may decline or reschedule a request
+            when the visit cannot be completed safely, lawfully, or within the available schedule.
           </p>
 
           <h2>Cancellation</h2>
@@ -1922,6 +1931,7 @@ function TermsPage() {
           <p>
             Information submitted through this website is handled according to the Privacy Policy. Payment card
             details are processed by Stripe for online checkout and are not stored directly by this website.
+            Do not submit another person's information unless you are authorized to schedule for that person.
           </p>
 
           <h2>Contact</h2>
@@ -1950,14 +1960,16 @@ function PrivacyPage() {
           <h2>Information collected</h2>
           <p>
             The website may collect name, date of birth, phone number, email address, service address, requested
-            appointment details, lab preference, prescription or kit status, number of patients, notes, payment
-            method, and related visit information.
+            appointment details, lab preference, prescription or kit status, group size, notes, payment method,
+            and related visit information. If insurance payment is enabled later, insurance information may also
+            be collected.
           </p>
 
           <h2>How information is used</h2>
           <p>
             Information is used to process appointment requests, calculate visit pricing, communicate with
-            patients, coordinate service, process payment, maintain records, prevent abuse, and operate the website.
+            scheduling contacts, coordinate service, process payment, maintain records, prevent abuse, protect
+            the website, and respond to legal or security needs.
           </p>
 
           <h2>Service providers</h2>
@@ -1966,6 +1978,11 @@ function PrivacyPage() {
             security, and payment processing. Online card checkout is handled by Stripe. On-site card payment is
             processed through Square.
           </p>
+          <p>
+            Service providers are expected to use information only for the services they provide to M.R.S. Medical
+            Services. Payment card numbers are handled by the payment processor and are not stored directly by this
+            website.
+          </p>
 
           <h2>Sharing</h2>
           <p>
@@ -1973,19 +1990,40 @@ function PrivacyPage() {
             operate the website, process payment, comply with law, prevent fraud or abuse, or protect patients and
             the business. Personal information is not sold.
           </p>
+          <p>
+            M.R.S. Medical Services does not use submitted health or appointment information for targeted advertising.
+          </p>
 
           <h2>Security and retention</h2>
           <p>
             The website uses administrative access controls, rate limits, secure browser headers, encrypted HTTPS
             transport in production, and third-party payment processing so card numbers are not stored by this site.
-            Records are retained only as needed for business, legal, payment, security, and service purposes.
+            No website or email system can be guaranteed completely secure, but reasonable safeguards are used for
+            the sensitivity of the information submitted.
+          </p>
+          <p>
+            Records are retained only as needed for business, legal, payment, security, and service purposes. When
+            records are no longer needed, they should be deleted, de-identified, or securely destroyed according to
+            the business record-retention process.
+          </p>
+
+          <h2>Health privacy</h2>
+          <p>
+            Depending on the services provided and relationships with labs, providers, health plans, or patients,
+            HIPAA or other health privacy and breach-notification rules may apply. M.R.S. Medical Services should
+            keep written privacy, security, breach-response, and vendor-review procedures outside this website.
           </p>
 
           <h2>Your choices</h2>
           <p>
-            To request access, correction, or deletion where legally available, email{' '}
+            To request access, correction, deletion, or a copy of submitted information where legally available,
+            email{' '}
             <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a> or call{' '}
             <a href="tel:+19084637457">(908) 463-7457</a>.
+          </p>
+          <p>
+            Some records may need to be kept for payment, legal, security, or service-documentation reasons even
+            after a deletion request.
           </p>
         </div>
       </section>
