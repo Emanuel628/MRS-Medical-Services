@@ -106,8 +106,8 @@ router.post('/', async (request, response) => {
     return;
   }
 
-  if (!resend) {
-    response.status(500).json({ message: 'Contact email is not configured.' });
+  if (!resend && !hasDatabaseUrl()) {
+    response.status(500).json({ message: 'Contact form is not configured.' });
     return;
   }
 
@@ -120,7 +120,18 @@ router.post('/', async (request, response) => {
 
   try {
     await saveContactRequest(body);
+  } catch (error) {
+    console.error('Contact request save failed', error);
+    response.status(500).json({ message: 'Message could not be saved right now.' });
+    return;
+  }
 
+  if (!resend) {
+    response.json({ message: 'Message saved successfully.' });
+    return;
+  }
+
+  try {
     await resend.emails.send({
       from: contactFromEmail,
       to: contactToEmail,
@@ -142,7 +153,7 @@ router.post('/', async (request, response) => {
     response.json({ message: 'Message sent successfully.' });
   } catch (error) {
     console.error('Resend contact email failed', error);
-    response.status(502).json({ message: 'Message could not be sent right now.' });
+    response.json({ message: 'Message saved successfully.' });
   }
 });
 

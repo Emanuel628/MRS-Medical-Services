@@ -57,10 +57,10 @@ type BlockedTime = {
 };
 
 const steps = [
-  ['1', 'Request a visit', 'Share the basic details and location so the visit can be reviewed.'],
-  ['2', 'Confirm the order', 'Have the required lab order, kit, or collection instructions ready.'],
+  ['1', 'Request a visit', 'Share your location, preferred timing, and collection needs.'],
+  ['2', 'Confirm the details', 'M.R.S. reviews the request, route timing, and required paperwork.'],
   ['3', 'Collection visit', 'A mobile phlebotomy visit is completed at the approved location.'],
-  ['4', 'Specimen handoff', 'Specimens are handled according to the order, kit, or lab instructions.'],
+  ['4', 'Specimen handoff', 'Specimens are handled according to the lab order or provider request.'],
 ];
 
 function pageFromPath(pathname: string): PageKey {
@@ -141,8 +141,8 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="hero-copy">
           <h1>Professional blood draws in the comfort of your space.</h1>
           <p>
-            M.R.S. Medical Services provides mobile specimen collection for people who need a
-            simpler way to complete blood work without sitting in a waiting room.
+            M.R.S. Medical Services brings mobile blood collection to homes, offices, and care
+            settings, so routine lab work can fit more easily into the day.
           </p>
           <div className="hero-buttons">
             <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
@@ -193,7 +193,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap cta-inner">
           <div>
             <h3>Need a mobile blood draw?</h3>
-            <p>Start with the intake form so location, timing, and collection needs can be reviewed.</p>
+            <p>Start with the intake form and M.R.S. will follow up to confirm timing.</p>
           </div>
           <button className="btn teal" type="button" onClick={() => onNavigate('intake')}>
             Request Visit
@@ -209,9 +209,8 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     <main>
       <PageHero title="Mobile blood collection made simple.">
         <p>
-          The services below are the core collection categories visitors commonly need. Final
-          eligibility, service area, timing, and order requirements should be confirmed before a
-          visit is scheduled.
+          M.R.S. supports common mobile blood draw needs throughout the listed service areas. Each
+          visit is reviewed before it is placed on the schedule.
         </p>
       </PageHero>
 
@@ -236,8 +235,8 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <span className="eyebrow">Payment</span>
             <h2>Mileage-based payment.</h2>
             <p>
-              Visit cost is confirmed before scheduling and may vary based on service location,
-              mileage, and collection needs.
+              Visit cost is confirmed before scheduling. Mileage, service location, and collection
+              needs are reviewed before payment is collected.
             </p>
             <p>Online payment support is planned so confirmed visits can be handled securely.</p>
           </article>
@@ -290,19 +289,18 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     <main>
       <PageHero title="Personal, professional mobile collection.">
         <p>
-          M.R.S. Medical Services is built around a simple idea: make specimen collection easier for
-          people who need convenient access outside a traditional waiting room.
+          M.R.S. Medical Services helps patients complete blood work without adding a waiting-room
+          visit to their day.
         </p>
       </PageHero>
 
       <section className="section">
         <div className="wrap about-layout">
           <div className="content-block">
-            <h2>Care without clutter</h2>
+            <h2>Focused, one-on-one service</h2>
             <p>
-              The service is intentionally focused: confirm the collection need, schedule an
-              appropriate visit, complete the blood draw, and follow the handling instructions for
-              the specimen.
+              The process is direct: confirm what needs to be collected, choose a workable visit
+              time, complete the draw, and handle the specimen according to the order.
             </p>
             <p>
               Service hours are Monday through Friday, 6 AM to 2 PM. Appointments require 24-hour
@@ -310,10 +308,10 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             </p>
           </div>
           <div className="about-note">
-            <strong>Content standard</strong>
+            <strong>What to expect</strong>
             <p>
-              This site avoids unverified claims, fabricated reviews, and unsupported healthcare
-              promises. That keeps the message simple and trustworthy.
+              You will be asked for basic visit details first. Medical questions, diagnosis, and
+              lab-result interpretation should always stay with your provider.
             </p>
           </div>
         </div>
@@ -461,6 +459,11 @@ function IntakePage() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
+  const selectedBlockedWindows = new Set(
+    blockedTimes
+      .filter((blocked) => getScheduleDateKey(blocked.blockDate) === form.requestedDate)
+      .map((blocked) => blocked.timeWindow),
+  );
 
   useEffect(() => {
     fetch('/api/availability/blocked-times')
@@ -471,6 +474,13 @@ function IntakePage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (form.preferredTimeWindow && selectedBlockedWindows.has(form.preferredTimeWindow)) {
+      setStatus('error');
+      setStatusMessage('That time window is unavailable. Please choose another option.');
+      return;
+    }
+
     setStatus('sending');
     setStatusMessage('Sending your intake form...');
 
@@ -527,8 +537,8 @@ function IntakePage() {
     <main>
       <PageHero title="Patient intake form.">
         <p>
-          Complete this form before requesting a visit. M.R.S. Medical Services will review the
-          details, route timing, and availability before confirming an appointment.
+          Send the details for the visit. M.R.S. will review the route, timing, and paperwork before
+          confirming an appointment.
         </p>
       </PageHero>
 
@@ -617,7 +627,19 @@ function IntakePage() {
                 <input
                   type="date"
                   value={form.requestedDate}
-                  onChange={(event) => setForm({ ...form, requestedDate: event.target.value })}
+                  onChange={(event) => {
+                    const nextDate = event.target.value;
+                    const blockedForDate = blockedTimes
+                      .filter((blocked) => getScheduleDateKey(blocked.blockDate) === nextDate)
+                      .map((blocked) => blocked.timeWindow);
+                    setForm({
+                      ...form,
+                      requestedDate: nextDate,
+                      preferredTimeWindow: blockedForDate.includes(form.preferredTimeWindow)
+                        ? ''
+                        : form.preferredTimeWindow,
+                    });
+                  }}
                 />
               </label>
               <label>
@@ -628,7 +650,9 @@ function IntakePage() {
                 >
                   <option value="">Select if known</option>
                   {timeWindowOptions.map((window) => (
-                    <option key={window} value={window}>{window}</option>
+                    <option key={window} value={window} disabled={selectedBlockedWindows.has(window)}>
+                      {selectedBlockedWindows.has(window) ? `${window} - unavailable` : window}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -1168,9 +1192,24 @@ function AdminPage() {
 }
 
 function formatScheduleDate(value: string) {
-  const date = new Date(value);
+  const dateKey = getScheduleDateKey(value);
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getScheduleDateKey(value: string) {
+  const dateOnly = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (dateOnly) return dateOnly;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function PageHero({ title, children }: { title: string; children: ReactNode }) {

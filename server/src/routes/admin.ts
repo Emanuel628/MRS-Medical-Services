@@ -221,6 +221,21 @@ router.post('/appointments', async (request, response) => {
 
   try {
     await ensureScheduleTables();
+    const conflict = await pool.query(
+      `SELECT 1 FROM appointments
+      WHERE appointment_date = $1 AND time_window = $2 AND status <> 'cancelled'
+      UNION ALL
+      SELECT 1 FROM blocked_times
+      WHERE block_date = $1 AND time_window = $2
+      LIMIT 1`,
+      [appointmentDate, timeWindow],
+    );
+
+    if (conflict.rowCount) {
+      response.status(409).json({ message: 'That date and time window is already unavailable.' });
+      return;
+    }
+
     const result = await pool.query<{ id: string }>(
       `INSERT INTO appointments (
         patient_name,
@@ -268,6 +283,21 @@ router.post('/blocked-times', async (request, response) => {
 
   try {
     await ensureScheduleTables();
+    const conflict = await pool.query(
+      `SELECT 1 FROM blocked_times
+      WHERE block_date = $1 AND time_window = $2
+      UNION ALL
+      SELECT 1 FROM appointments
+      WHERE appointment_date = $1 AND time_window = $2 AND status <> 'cancelled'
+      LIMIT 1`,
+      [blockDate, timeWindow],
+    );
+
+    if (conflict.rowCount) {
+      response.status(409).json({ message: 'That date and time window is already unavailable.' });
+      return;
+    }
+
     const result = await pool.query<{ id: string }>(
       `INSERT INTO blocked_times (block_date, time_window, reason)
       VALUES ($1, $2, $3)
