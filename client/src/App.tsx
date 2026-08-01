@@ -447,12 +447,18 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   return (
     <main>
-      <PageHero title="Personal, professional mobile collection.">
-        <p>
-          M.R.S. Medical Services brings experienced, certified phlebotomy care to patients who
-          need blood work completed outside of a traditional lab setting.
-        </p>
-      </PageHero>
+      <section className="page-hero about-hero">
+        <div className="wrap about-hero-inner">
+          <div>
+            <h1>Personal, professional mobile collection.</h1>
+            <p>
+              M.R.S. Medical Services brings experienced, certified phlebotomy care to patients who
+              need blood work completed outside of a traditional lab setting.
+            </p>
+          </div>
+          <img src="/images/about-care-team.png" alt="Smiling healthcare team and patient" />
+        </div>
+      </section>
 
       <section className="section">
         <div className="wrap about-layout">
@@ -486,7 +492,6 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             </p>
           </div>
           <div className="about-notes">
-            <img className="about-image" src="/images/about-care-team.png" alt="Smiling healthcare team and patient" />
             <div className="about-note">
               <strong>Background includes</strong>
               <ul className="about-list">
