@@ -8,6 +8,13 @@ export type VisitPricingInput = {
   additionalPatientFeeCents?: number;
 };
 
+export type IntakePricingInput = {
+  zipCode?: string | null;
+  appointmentDate?: string | Date | null;
+  timeWindow?: string | null;
+  patientCount?: number;
+};
+
 export type VisitPriceQuote = {
   status: 'quoted' | 'custom_quote';
   totalCents: number | null;
@@ -88,4 +95,22 @@ export function calculateVisitPrice(input: VisitPricingInput): VisitPriceQuote {
     totalCents: lineItems.reduce((total, item) => total + (item.amountCents || 0), 0),
     lineItems,
   };
+}
+
+function estimateOneWayTravelMinutes(zipCode: string | null | undefined) {
+  const prefix = (zipCode || '').trim().slice(0, 3);
+
+  if (prefix === '087' || prefix === '077') return 60;
+  if (prefix === '080' || prefix === '081') return 90;
+  if (prefix === '085' || prefix === '086' || prefix === '088') return 90;
+  return null;
+}
+
+export function calculateIntakeVisitPrice(input: IntakePricingInput) {
+  return calculateVisitPrice({
+    oneWayTravelMinutes: estimateOneWayTravelMinutes(input.zipCode),
+    appointmentDate: input.appointmentDate,
+    timeWindow: input.timeWindow,
+    patientCount: input.patientCount,
+  });
 }

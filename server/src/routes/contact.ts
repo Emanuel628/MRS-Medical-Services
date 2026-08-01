@@ -1,7 +1,8 @@
 import { Router, type Request } from 'express';
 import { Resend } from 'resend';
-import { calculateVisitPrice } from '../config/pricing.js';
+import { calculateIntakeVisitPrice, calculateVisitPrice } from '../config/pricing.js';
 import { pool } from '../config/database.js';
+import { getStripeClient, getStripeCurrency } from '../config/stripe.js';
 
 const router = Router();
 
@@ -29,6 +30,11 @@ type ContactRequest = {
   isWeekendOrHoliday?: boolean;
   patientCount?: number;
   additionalPatientFeeCents?: number;
+  paymentMethod?: string;
+  insuranceProvider?: string;
+  insuranceMemberId?: string;
+  insuranceGroupNumber?: string;
+  policyholderName?: string;
 };
 
 type SavedContactRequest = {
@@ -36,6 +42,7 @@ type SavedContactRequest = {
   cancelToken: string | null;
   patientConfirmToken: string | null;
   mrsmsDecisionToken: string | null;
+  quotedPriceCents: number | null;
 };
 
 type CancellationRow = {
@@ -131,6 +138,10 @@ export async function ensureDatabase() {
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS cancellation_reason TEXT');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS quoted_price_cents INTEGER');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS pricing_quote JSONB');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS payment_method TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS payment_status TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS insurance_details JSONB');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS stripe_checkout_session_id TEXT');
   await pool.query('UPDATE contact_requests SET cancel_token = gen_random_uuid() WHERE cancel_token IS NULL');
   await pool.query('UPDATE contact_requests SET patient_confirm_token = gen_random_uuid() WHERE patient_confirm_token IS NULL');
   await pool.query('UPDATE contact_requests SET mrsms_decision_token = gen_random_uuid() WHERE mrsms_decision_token IS NULL');
@@ -144,6 +155,10 @@ export async function ensureDatabase() {
 
 function cleanRequestType(value: string) {
   return value === 'intake' || value === 'manual_intake' ? value : 'contact';
+}
+
+function cleanPaymentMethod(value: string) {
+  return value === 'card' || value === 'insurance' || value === 'pay_at_site' ? value : 'card';
 }
 
 function isUuid(value: string) {
@@ -425,6 +440,83 @@ function getCancelUrl(request: Request, token: string | null | undefined) {
   return token ? `${getSiteOrigin(request)}/cancel?token=${token}` : '';
 }
 
+function getPaymentStatus(paymentMethod: string, checkoutUrl?: string) {
+  if (paymentMethod === 'card') return checkoutUrl ? 'checkout_pending' : 'payment_pending';
+  if (paymentMethod === 'insurance') return 'insurance_pending';
+  return 'pay_at_site';
+}
+
+function getInsuranceDetails(body: ContactRequest) {
+  return {
+    provider: cleanField(body.insuranceProvider),
+    memberId: cleanField(body.insuranceMemberId),
+    groupNumber: cleanField(body.insuranceGroupNumber),
+    policyholderName: cleanField(body.policyholderName),
+  };
+}
+
+async function updatePaymentStatus(id: string, paymentStatus: string, checkoutSessionId?: string) {
+  await pool.query(
+    `UPDATE contact_requests
+     SET payment_status = $2,
+       stripe_checkout_session_id = COALESCE($3, stripe_checkout_session_id),
+       updated_at = NOW()
+     WHERE id = $1`,
+    [id, paymentStatus, checkoutSessionId || null],
+  );
+}
+
+async function sendIntakeReceivedEmail(row: CancellationRow, hasKit: boolean) {
+  if (!row.email) return;
+
+  await sendEmail({
+    to: row.email,
+    subject: 'M.R.S. Medical Services visit request received',
+    title: 'Visit request received',
+    paragraphs: [
+      `Hi ${row.fullName},`,
+      `Thank you for requesting an appointment with M.R.S. Medical Services. We received your request for ${getAppointmentLabel(row.preferredDate, row.preferredTimeWindow)}.`,
+      'This is not a confirmed appointment yet. M.R.S. Medical Services will review the request and contact you to confirm the appointment.',
+      'Appointments must be canceled at least 24 hours in advance.',
+      ...(hasKit ? [kitScheduleNote] : []),
+    ],
+    actions: row.cancelToken ? [{ label: 'Cancel appointment request', url: `${getConfiguredSiteOrigin()}/cancel?token=${row.cancelToken}` }] : [],
+  });
+}
+
+async function createPatientCheckoutSession(request: Request, savedRequest: SavedContactRequest, body: ContactRequest) {
+  const stripe = getStripeClient();
+  if (!stripe || !savedRequest.quotedPriceCents) return null;
+
+  const origin = getSiteOrigin(request);
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    success_url: `${origin}/intake?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/intake?payment=cancelled`,
+    customer_email: cleanField(body.email),
+    client_reference_id: savedRequest.id,
+    metadata: {
+      contactRequestId: savedRequest.id,
+      paymentFor: 'patient_intake',
+    },
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: getStripeCurrency(),
+          unit_amount: savedRequest.quotedPriceCents,
+          product_data: {
+            name: 'M.R.S. Medical Services visit',
+          },
+        },
+      },
+    ],
+  });
+
+  await updatePaymentStatus(savedRequest.id, 'checkout_pending', session.id);
+  return session.url;
+}
+
 export async function saveContactRequest(body: ContactRequest): Promise<SavedContactRequest | null> {
   if (!hasDatabaseUrl()) return null;
 
@@ -439,13 +531,21 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
   const zipCode = cleanField(body.zipCode) || null;
   const preferredDate = cleanField(body.preferredDate) || null;
   const preferredTimeWindow = cleanField(body.preferredTimeWindow) || null;
+  const paymentMethod = requestType === 'intake' ? cleanPaymentMethod(cleanField(body.paymentMethod)) : null;
+  const insuranceDetails = paymentMethod === 'insurance' ? getInsuranceDetails(body) : null;
   const oneWayTravelMinutes = cleanOptionalNumber(body.oneWayTravelMinutes);
   const hasPricingInputs = oneWayTravelMinutes !== undefined ||
     body.isStatOrRush === true ||
     body.isWeekendOrHoliday === true ||
     cleanOptionalNumber(body.patientCount) !== undefined ||
     cleanOptionalNumber(body.additionalPatientFeeCents) !== undefined;
-  const priceQuote = hasPricingInputs
+  const priceQuote = requestType === 'intake'
+    ? calculateIntakeVisitPrice({
+        zipCode,
+        appointmentDate: preferredDate,
+        timeWindow: preferredTimeWindow,
+      })
+    : hasPricingInputs
     ? calculateVisitPrice({
         oneWayTravelMinutes,
         appointmentDate: preferredDate,
@@ -469,14 +569,18 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
       preferred_date,
       preferred_time_window,
       quoted_price_cents,
-      pricing_quote
+      pricing_quote,
+      payment_method,
+      payment_status,
+      insurance_details
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING
       id,
       cancel_token AS "cancelToken",
       patient_confirm_token AS "patientConfirmToken",
-      mrsms_decision_token AS "mrsmsDecisionToken"`,
+      mrsms_decision_token AS "mrsmsDecisionToken",
+      quoted_price_cents AS "quotedPriceCents"`,
     [
       name,
       email || null,
@@ -489,6 +593,9 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
       preferredTimeWindow,
       priceQuote?.totalCents ?? null,
       priceQuote ? JSON.stringify(priceQuote) : null,
+      paymentMethod,
+      paymentMethod ? getPaymentStatus(paymentMethod) : null,
+      insuranceDetails ? JSON.stringify(insuranceDetails) : null,
     ],
   );
 
@@ -503,10 +610,19 @@ router.post('/', async (request, response) => {
   const message = cleanField(body.message);
   const requestType = cleanRequestType(cleanField(body.requestType));
   const hasKit = body.hasKit === true;
+  const paymentMethod = requestType === 'intake' ? cleanPaymentMethod(cleanField(body.paymentMethod)) : null;
 
   if (!name || !phone || !email || !message) {
     response.status(400).json({ message: 'Name, phone, email, and message are required.' });
     return;
+  }
+
+  if (requestType === 'intake' && paymentMethod === 'insurance') {
+    const insurance = getInsuranceDetails(body);
+    if (!insurance.provider || !insurance.memberId || !insurance.policyholderName) {
+      response.status(400).json({ message: 'Insurance provider, member ID, and policyholder name are required.' });
+      return;
+    }
   }
 
   if (!resend && !hasDatabaseUrl()) {
@@ -527,8 +643,24 @@ router.post('/', async (request, response) => {
     return;
   }
 
+  let checkoutUrl: string | null = null;
+  if (requestType === 'intake' && paymentMethod === 'card') {
+    try {
+      checkoutUrl = savedRequest ? await createPatientCheckoutSession(request, savedRequest, body) : null;
+    } catch (error) {
+      console.error('Patient Stripe checkout failed', error);
+      response.status(500).json({ message: 'Secure checkout could not be started right now.' });
+      return;
+    }
+
+    if (!checkoutUrl) {
+      response.status(503).json({ message: 'Secure checkout is not configured right now. Please choose another payment option or call M.R.S. Medical Services.' });
+      return;
+    }
+  }
+
   if (!resend) {
-    response.json({ message: 'Message saved successfully.' });
+    response.json({ message: 'Message saved successfully.', id: savedRequest?.id, checkoutUrl });
     return;
   }
 
@@ -562,29 +694,70 @@ router.post('/', async (request, response) => {
       });
     }
 
-    if (requestType === 'intake') {
-      const cancelUrl = getCancelUrl(request, savedRequest?.cancelToken);
-      const appointmentLabel = getAppointmentLabel(cleanField(body.preferredDate), cleanField(body.preferredTimeWindow));
-
-      await sendEmail({
-        to: email,
-        subject: 'M.R.S. Medical Services visit request received',
-        title: 'Visit request received',
-        paragraphs: [
-          `Hi ${name},`,
-          `Thank you for requesting an appointment with M.R.S. Medical Services. We received your request for ${appointmentLabel}.`,
-          'This is not a confirmed appointment yet. M.R.S. Medical Services will review the request and contact you to confirm the appointment.',
-          'Appointments must be canceled at least 24 hours in advance.',
-          ...(hasKit ? [kitScheduleNote] : []),
-        ],
-        actions: cancelUrl ? [{ label: 'Cancel appointment request', url: cancelUrl }] : [],
-      });
+    if (requestType === 'intake' && paymentMethod !== 'card') {
+      await sendIntakeReceivedEmail({
+        fullName: name,
+        email,
+        phone,
+        preferredDate: cleanField(body.preferredDate),
+        preferredTimeWindow: cleanField(body.preferredTimeWindow),
+        status: 'new',
+        cancelToken: savedRequest?.cancelToken,
+      }, hasKit);
     }
 
-    response.json({ message: 'Message sent successfully.' });
+    response.json({ message: 'Message sent successfully.', id: savedRequest?.id, checkoutUrl });
   } catch (error) {
     console.error('Resend contact email failed', error);
-    response.json({ message: 'Message saved successfully.' });
+    response.json({ message: 'Message saved successfully.', id: savedRequest?.id, checkoutUrl });
+  }
+});
+
+router.post('/payment-success', async (request, response) => {
+  const sessionId = cleanField(request.body?.sessionId);
+  if (!sessionId) {
+    response.status(400).json({ message: 'Checkout session is required.' });
+    return;
+  }
+
+  const stripe = getStripeClient();
+  if (!stripe || !hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Payment confirmation is not configured.' });
+    return;
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== 'paid' || !session.client_reference_id) {
+      response.status(409).json({ message: 'Payment has not been completed yet.' });
+      return;
+    }
+
+    await ensureDatabase();
+    const result = await pool.query<CancellationRow>(
+      `UPDATE contact_requests
+       SET payment_status = 'paid',
+         stripe_checkout_session_id = $2,
+         updated_at = NOW()
+       WHERE id = $1 AND payment_status <> 'paid'
+       RETURNING
+         full_name AS "fullName",
+         email,
+         phone,
+         preferred_date AS "preferredDate",
+         preferred_time_window AS "preferredTimeWindow",
+         status,
+         cancel_token AS "cancelToken"`,
+      [session.client_reference_id, session.id],
+    );
+    const row = result.rows[0];
+    if (row && resend) {
+      await sendIntakeReceivedEmail(row, false);
+    }
+    response.json({ message: 'Payment confirmed.' });
+  } catch (error) {
+    console.error('Payment confirmation failed', error);
+    response.status(500).json({ message: 'Payment confirmation could not be completed right now.' });
   }
 });
 

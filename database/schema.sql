@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS contact_requests (
   cancellation_reason TEXT,
   quoted_price_cents INTEGER,
   pricing_quote JSONB,
+  payment_method TEXT,
+  payment_status TEXT,
+  insurance_details JSONB,
+  stripe_checkout_session_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

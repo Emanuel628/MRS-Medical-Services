@@ -726,6 +726,11 @@ function IntakePage() {
     preferredTimeWindow: '',
     prescriptionReady: false,
     hasKit: false,
+    paymentMethod: 'card',
+    insuranceProvider: '',
+    insuranceMemberId: '',
+    insuranceGroupNumber: '',
+    policyholderName: '',
     notes: '',
   });
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
@@ -758,6 +763,52 @@ function IntakePage() {
       .then((response) => response.json())
       .then((result: { blockedTimes?: BlockedTime[] }) => setBlockedTimes(result.blockedTimes || []))
       .catch(() => setBlockedTimes([]));
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+    const sessionId = params.get('session_id');
+
+    if (payment === 'success') {
+      const storedRequest = window.sessionStorage.getItem('mrsPendingIntake');
+      const pendingRequest = storedRequest ? JSON.parse(storedRequest) as {
+        fullName?: string;
+        email?: string;
+        requestedDate?: string;
+        preferredTimeWindow?: string;
+      } : null;
+
+      if (pendingRequest) {
+        setForm((currentForm) => ({
+          ...currentForm,
+          fullName: pendingRequest.fullName || currentForm.fullName,
+          email: pendingRequest.email || currentForm.email,
+          requestedDate: pendingRequest.requestedDate || currentForm.requestedDate,
+          preferredTimeWindow: pendingRequest.preferredTimeWindow || currentForm.preferredTimeWindow,
+        }));
+      }
+
+      if (sessionId) {
+        void fetch('/api/contact/payment-success', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+        }).catch(() => undefined);
+      }
+
+      window.sessionStorage.removeItem('mrsPendingIntake');
+      setStatus('success');
+      setStatusMessage('Your payment was received. Please watch for a confirmation email.');
+      setShowConfirmation(true);
+      window.history.replaceState(null, '', '/intake');
+    }
+
+    if (payment === 'cancelled') {
+      setStatus('idle');
+      setStatusMessage('Secure checkout was cancelled. Choose a payment option and submit again when ready.');
+      window.history.replaceState(null, '', '/intake');
+    }
   }, []);
 
   useEffect(() => {
@@ -821,8 +872,14 @@ function IntakePage() {
       return;
     }
 
+    if (form.paymentMethod === 'insurance' && (!form.insuranceProvider || !form.insuranceMemberId || !form.policyholderName)) {
+      setStatus('error');
+      setStatusMessage('Please enter insurance provider, member ID, and policyholder name.');
+      return;
+    }
+
     setStatus('sending');
-    setStatusMessage('Sending your intake form...');
+    setStatusMessage(form.paymentMethod === 'card' ? 'Preparing secure checkout...' : 'Sending your intake form...');
 
     const message = [
       'Patient intake request',
@@ -841,6 +898,15 @@ function IntakePage() {
       `Preferred time window: ${form.preferredTimeWindow || 'Not specified'}`,
       `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
       `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
+      `Payment method: ${form.paymentMethod === 'insurance' ? 'Insurance' : form.paymentMethod === 'pay_at_site' ? 'Pay at site' : 'Card checkout'}`,
+      ...(form.paymentMethod === 'insurance'
+        ? [
+            `Insurance provider: ${form.insuranceProvider}`,
+            `Insurance member ID: ${form.insuranceMemberId}`,
+            `Insurance group number: ${form.insuranceGroupNumber || 'Not provided'}`,
+            `Policyholder name: ${form.policyholderName}`,
+          ]
+        : []),
       '',
       'Notes:',
       form.notes || 'None',
@@ -867,14 +933,30 @@ function IntakePage() {
           state: form.state,
           preferredLab: form.preferredLab,
           prescriptionReady: form.prescriptionReady,
+          paymentMethod: form.paymentMethod,
+          insuranceProvider: form.insuranceProvider,
+          insuranceMemberId: form.insuranceMemberId,
+          insuranceGroupNumber: form.insuranceGroupNumber,
+          policyholderName: form.policyholderName,
           notes: form.notes,
         }),
       });
 
-      const result = (await response.json().catch(() => ({}))) as { message?: string };
+      const result = (await response.json().catch(() => ({}))) as { message?: string; checkoutUrl?: string };
 
       if (!response.ok) {
         throw new Error(result.message || 'Intake form could not be sent right now.');
+      }
+
+      if (result.checkoutUrl) {
+        window.sessionStorage.setItem('mrsPendingIntake', JSON.stringify({
+          fullName: form.fullName,
+          email: form.email,
+          requestedDate: form.requestedDate,
+          preferredTimeWindow: form.preferredTimeWindow,
+        }));
+        window.location.assign(result.checkoutUrl);
+        return;
       }
 
       setStatus('success');
@@ -1168,8 +1250,78 @@ function IntakePage() {
               />
             </label>
 
+            <fieldset className="payment-methods">
+              <legend>Payment method</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="card"
+                  checked={form.paymentMethod === 'card'}
+                  onChange={() => setForm({ ...form, paymentMethod: 'card' })}
+                />
+                <span>Secure card checkout</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="insurance"
+                  checked={form.paymentMethod === 'insurance'}
+                  onChange={() => setForm({ ...form, paymentMethod: 'insurance' })}
+                />
+                <span>Paid by insurance</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="pay_at_site"
+                  checked={form.paymentMethod === 'pay_at_site'}
+                  onChange={() => setForm({ ...form, paymentMethod: 'pay_at_site' })}
+                />
+                <span>Pay at site</span>
+              </label>
+            </fieldset>
+
+            {form.paymentMethod === 'insurance' && (
+              <div className="form-grid insurance-fields">
+                <label>
+                  Insurance provider
+                  <input
+                    value={form.insuranceProvider}
+                    onChange={(event) => setForm({ ...form, insuranceProvider: event.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  Member ID
+                  <input
+                    value={form.insuranceMemberId}
+                    onChange={(event) => setForm({ ...form, insuranceMemberId: event.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  Group number
+                  <input
+                    value={form.insuranceGroupNumber}
+                    onChange={(event) => setForm({ ...form, insuranceGroupNumber: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Policyholder name
+                  <input
+                    value={form.policyholderName}
+                    onChange={(event) => setForm({ ...form, policyholderName: event.target.value })}
+                    required
+                  />
+                </label>
+              </div>
+            )}
+
             <button className="btn primary" type="submit" disabled={status === 'sending'}>
-              {status === 'sending' ? 'Sending...' : 'Submit Intake'}
+              {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Intake'}
             </button>
             {statusMessage && (
               <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
