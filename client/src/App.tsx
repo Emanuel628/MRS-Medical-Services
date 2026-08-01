@@ -191,9 +191,29 @@ function getPasswordStrengthLabel(score: number) {
 
 function estimateOneWayTravelMinutes(zipCode: string) {
   const prefix = zipCode.trim().slice(0, 3);
-  if (prefix === '087' || prefix === '077') return 60;
-  if (['080', '081', '085', '086', '088'].includes(prefix)) return 90;
-  return null;
+  const pricingOrigin = { lat: 39.6043, lng: -74.3401 };
+  const zipCentroids: Record<string, { lat: number; lng: number }> = {
+    '08087': { lat: 39.6043, lng: -74.3401 },
+    '077': { lat: 40.35, lng: -74.08 },
+    '080': { lat: 39.82, lng: -74.87 },
+    '081': { lat: 39.94, lng: -75.10 },
+    '085': { lat: 40.28, lng: -74.60 },
+    '086': { lat: 40.22, lng: -74.76 },
+    '087': { lat: 39.92, lng: -74.20 },
+    '088': { lat: 40.55, lng: -74.45 },
+  };
+  const destination = zipCentroids[zipCode.trim().slice(0, 5)] || zipCentroids[prefix];
+  if (!destination) return null;
+
+  const radians = Math.PI / 180;
+  const lat1 = pricingOrigin.lat * radians;
+  const lat2 = destination.lat * radians;
+  const deltaLat = (destination.lat - pricingOrigin.lat) * radians;
+  const deltaLng = (destination.lng - pricingOrigin.lng) * radians;
+  const a = Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+  const miles = 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.ceil(miles * 1.55 + 8);
 }
 
 function calculateIntakeTotal(zipCode: string, requestedDate: string, timeWindow: string, patientCount: number) {
@@ -214,7 +234,7 @@ function calculateIntakeTotal(zipCode: string, requestedDate: string, timeWindow
 }
 
 function formatCurrency(value: number | null) {
-  if (value === null) return 'Custom quote';
+  if (value === null) return '';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 }
 
@@ -1188,10 +1208,7 @@ function IntakePage() {
                 I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
               </label>
             </div>
-              </section>
 
-              <section className="intake-panel appointment-panel" aria-labelledby="appointment-info-title">
-                <h2 id="appointment-info-title">Appointment info</h2>
             <label>
               Number of people
               <input
@@ -1204,6 +1221,101 @@ function IntakePage() {
               />
             </label>
 
+            <fieldset className="payment-methods">
+              <legend>Payment method</legend>
+              <div className="payment-method-grid">
+                <div className="payment-option-list">
+                  <label>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="card"
+                      checked={form.paymentMethod === 'card'}
+                      onChange={() => setForm({ ...form, paymentMethod: 'card' })}
+                    />
+                    <span>Secure card checkout</span>
+                  </label>
+                  <label className="insurance-option-hidden">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="insurance"
+                      checked={form.paymentMethod === 'insurance'}
+                      onChange={() => setForm({ ...form, paymentMethod: 'insurance' })}
+                    />
+                    <span>Paid by insurance</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="pay_at_site"
+                      checked={form.paymentMethod === 'pay_at_site'}
+                      onChange={() => setForm({ ...form, paymentMethod: 'pay_at_site' })}
+                    />
+                    <span>Pay at site</span>
+                  </label>
+                </div>
+                {form.paymentMethod === 'card' && (
+                  <div className="checkout-total" aria-live="polite">
+                    <span>Checkout total</span>
+                    <strong>{formatCurrency(cardTotal)}</strong>
+                  </div>
+                )}
+              </div>
+              {form.paymentMethod === 'pay_at_site' && (
+                <p className="payment-warning">Checks are not accepted. Venmo or Square payment is accepted at the visit.</p>
+              )}
+            </fieldset>
+
+            {form.paymentMethod === 'insurance' && (
+              <div className={`form-grid insurance-fields ${missingInsurance ? 'field-invalid' : ''}`}>
+                <label>
+                  Insurance provider
+                  <input
+                    value={form.insuranceProvider}
+                    onChange={(event) => setForm({ ...form, insuranceProvider: event.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  Member ID
+                  <input
+                    value={form.insuranceMemberId}
+                    onChange={(event) => setForm({ ...form, insuranceMemberId: event.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  Group number
+                  <input
+                    value={form.insuranceGroupNumber}
+                    onChange={(event) => setForm({ ...form, insuranceGroupNumber: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Policyholder name
+                  <input
+                    value={form.policyholderName}
+                    onChange={(event) => setForm({ ...form, policyholderName: event.target.value })}
+                    required
+                  />
+                </label>
+              </div>
+            )}
+
+            <button className="btn primary" type="submit" disabled={status === 'sending'}>
+              {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Intake'}
+            </button>
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+              </section>
+
+              <section className="intake-panel appointment-panel" aria-labelledby="appointment-info-title">
+                <h2 id="appointment-info-title">Appointment info</h2>
             <div className={`booking-calendar ${missingDate || missingTime ? 'field-invalid' : ''}`} aria-label="Visit availability picker">
               <div className="calendar-header">
                 <button
@@ -1309,97 +1421,8 @@ function IntakePage() {
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
               />
             </label>
-
-            <fieldset className="payment-methods">
-              <legend>Payment method</legend>
-              <div className="payment-method-grid">
-                <div className="payment-option-list">
-                  <label>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="card"
-                      checked={form.paymentMethod === 'card'}
-                      onChange={() => setForm({ ...form, paymentMethod: 'card' })}
-                    />
-                    <span>Secure card checkout</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="insurance"
-                      checked={form.paymentMethod === 'insurance'}
-                      onChange={() => setForm({ ...form, paymentMethod: 'insurance' })}
-                    />
-                    <span>Paid by insurance</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="pay_at_site"
-                      checked={form.paymentMethod === 'pay_at_site'}
-                      onChange={() => setForm({ ...form, paymentMethod: 'pay_at_site' })}
-                    />
-                    <span>Pay at site</span>
-                  </label>
-                </div>
-                {form.paymentMethod === 'card' && (
-                  <div className="checkout-total" aria-live="polite">
-                    <span>Checkout total</span>
-                    <strong>{formatCurrency(cardTotal)}</strong>
-                  </div>
-                )}
-              </div>
-            </fieldset>
-
-            {form.paymentMethod === 'insurance' && (
-              <div className={`form-grid insurance-fields ${missingInsurance ? 'field-invalid' : ''}`}>
-                <label>
-                  Insurance provider
-                  <input
-                    value={form.insuranceProvider}
-                    onChange={(event) => setForm({ ...form, insuranceProvider: event.target.value })}
-                    required
-                  />
-                </label>
-                <label>
-                  Member ID
-                  <input
-                    value={form.insuranceMemberId}
-                    onChange={(event) => setForm({ ...form, insuranceMemberId: event.target.value })}
-                    required
-                  />
-                </label>
-                <label>
-                  Group number
-                  <input
-                    value={form.insuranceGroupNumber}
-                    onChange={(event) => setForm({ ...form, insuranceGroupNumber: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Policyholder name
-                  <input
-                    value={form.policyholderName}
-                    onChange={(event) => setForm({ ...form, policyholderName: event.target.value })}
-                    required
-                  />
-                </label>
-              </div>
-            )}
               </section>
             </div>
-
-            <button className="btn primary" type="submit" disabled={status === 'sending'}>
-              {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Intake'}
-            </button>
-            {statusMessage && (
-              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
-                {statusMessage}
-              </p>
-            )}
           </form>
 
         </div>

@@ -32,6 +32,21 @@ const statRushFeeCents = 2500;
 const weekendHolidayFeeCents = 2500;
 const earlyMorningOrEveningFeeCents = 2500;
 const defaultAdditionalPatientFeeCents = 3500;
+const pricingOrigin = {
+  address: '373 Heritage Way, Tuckerton, NJ 08087',
+  lat: 39.6043,
+  lng: -74.3401,
+};
+const zipCentroids: Record<string, { lat: number; lng: number }> = {
+  '08087': { lat: 39.6043, lng: -74.3401 },
+  '077': { lat: 40.35, lng: -74.08 },
+  '080': { lat: 39.82, lng: -74.87 },
+  '081': { lat: 39.94, lng: -75.10 },
+  '085': { lat: 40.28, lng: -74.60 },
+  '086': { lat: 40.22, lng: -74.76 },
+  '087': { lat: 39.92, lng: -74.20 },
+  '088': { lat: 40.55, lng: -74.45 },
+};
 
 function cleanNumber(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -61,6 +76,17 @@ function getTravelBaseFee(oneWayTravelMinutes: number | null) {
   if (oneWayTravelMinutes === null) return null;
 
   return travelTiers.find((tier) => oneWayTravelMinutes <= tier.maxMinutes)?.amountCents ?? null;
+}
+
+function getDistanceMiles(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
+  const radians = Math.PI / 180;
+  const lat1 = from.lat * radians;
+  const lat2 = to.lat * radians;
+  const deltaLat = (to.lat - from.lat) * radians;
+  const deltaLng = (to.lng - from.lng) * radians;
+  const a = Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export function calculateVisitPrice(input: VisitPricingInput): VisitPriceQuote {
@@ -98,12 +124,14 @@ export function calculateVisitPrice(input: VisitPricingInput): VisitPriceQuote {
 }
 
 function estimateOneWayTravelMinutes(zipCode: string | null | undefined) {
-  const prefix = (zipCode || '').trim().slice(0, 3);
+  const cleanZip = (zipCode || '').trim();
+  const prefix = cleanZip.slice(0, 3);
+  const destination = zipCentroids[cleanZip.slice(0, 5)] || zipCentroids[prefix];
 
-  if (prefix === '087' || prefix === '077') return 60;
-  if (prefix === '080' || prefix === '081') return 90;
-  if (prefix === '085' || prefix === '086' || prefix === '088') return 90;
-  return null;
+  if (!destination) return null;
+
+  const miles = getDistanceMiles(pricingOrigin, destination);
+  return Math.ceil(miles * 1.55 + 8);
 }
 
 export function calculateIntakeVisitPrice(input: IntakePricingInput) {

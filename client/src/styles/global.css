@@ -747,6 +747,10 @@ a {
   gap: 12px;
 }
 
+.insurance-option-hidden {
+  display: none;
+}
+
 .payment-methods legend {
   padding: 0 6px;
   color: var(--navy-deep);
@@ -796,6 +800,17 @@ a {
 .checkout-total strong {
   color: var(--navy-deep);
   font: 700 28px / 1.05 Georgia, 'Times New Roman', serif;
+}
+
+.payment-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 4px solid #b70f1e;
+  color: var(--ink);
+  background: #fff8f8;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 .insurance-fields {
