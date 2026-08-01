@@ -482,7 +482,8 @@ function IntakePage() {
     <main>
       <PageHero title="Patient intake form.">
         <p>
-          Complete this form before requesting a visit. No account is required to book services.
+          Complete this form before requesting a visit. M.R.S. Medical Services will review the
+          details and follow up directly.
         </p>
       </PageHero>
 
