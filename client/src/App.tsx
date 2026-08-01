@@ -1233,6 +1233,7 @@ function IntakePage() {
                     })}
                   />
                   <span>Groups:</span>
+                  {' '}
                   <small>For more than 1 patient.</small>
                 </label>
                 {form.isGroup && (
