@@ -12,12 +12,18 @@ CREATE TABLE IF NOT EXISTS contact_requests (
   service_area TEXT,
   preferred_date DATE,
   preferred_time_window TEXT,
+  cancel_token UUID UNIQUE DEFAULT gen_random_uuid(),
+  canceled_at TIMESTAMPTZ,
+  cancellation_reason TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS contact_requests_created_at_idx
   ON contact_requests (created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS contact_requests_cancel_token_idx
+  ON contact_requests (cancel_token);
 
 CREATE TABLE IF NOT EXISTS appointments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

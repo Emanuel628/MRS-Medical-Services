@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
-type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin';
+type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin' | 'cancel';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
@@ -31,7 +31,6 @@ const timeWindowOptions = [
   '12 PM - 1 PM',
   '1 PM - 2 PM',
 ];
-const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
 type AdminRequest = {
   id: string;
@@ -67,6 +66,17 @@ type BlockedTime = {
   source?: 'blocked' | 'appointment';
 };
 
+type CancellationDetails = {
+  fullName: string;
+  email: string | null;
+  phone: string;
+  preferredDate: string;
+  preferredTimeWindow: string;
+  status: string;
+  canCancel: boolean;
+  message?: string;
+};
+
 const steps = [
   ['1', 'Request a visit', 'Share your location, preferred timing, and collection needs.'],
   ['2', 'Confirm the details', 'M.R.S. reviews the request, route timing, and required paperwork.'],
@@ -99,7 +109,7 @@ const reviews = [
 ];
 
 const appointmentConfirmationNote =
-  'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. M.R.S. Medical Services will soon be accepting insurance.';
+  'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. Appointments must be canceled at least 24 hours in advance.';
 
 function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/services')) return 'services';
@@ -107,6 +117,7 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/about')) return 'about';
   if (pathname.startsWith('/contact')) return 'contact';
   if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/cancel')) return 'cancel';
   return 'home';
 }
 
@@ -563,8 +574,8 @@ function IntakePage() {
     dateOfBirth: '',
     phone: '',
     email: '',
-    address: '',
-    serviceArea: '',
+    addressLine1: '',
+    addressLine2: '',
     preferredLab: '',
     requestedDate: '',
     preferredTimeWindow: '',
@@ -576,9 +587,7 @@ function IntakePage() {
   const [statusMessage, setStatusMessage] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
-  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
-  const todayKey = getLocalDateKey(new Date());
-  const calendarDays = getCalendarDays(visibleMonth);
+  const rollingDates = getRollingVisitDates(new Date(), 30);
   const selectedBlockedWindows = new Set(
     blockedTimes
       .filter((blocked) => getScheduleDateKey(blocked.blockDate) === form.requestedDate)
@@ -615,6 +624,12 @@ function IntakePage() {
       return;
     }
 
+    if (!isAdultPatient(form.dateOfBirth)) {
+      setStatus('error');
+      setStatusMessage('Patients must be 19 or older to schedule through the intake form.');
+      return;
+    }
+
     if (form.preferredTimeWindow && selectedUnavailableWindows.has(form.preferredTimeWindow)) {
       setStatus('error');
       setStatusMessage('That time window is unavailable. Please choose another option.');
@@ -631,8 +646,8 @@ function IntakePage() {
       `Date of birth: ${form.dateOfBirth}`,
       `Phone: ${form.phone}`,
       `Email: ${form.email || 'Not provided'}`,
-      `Address: ${form.address}`,
-      `Service area: ${form.serviceArea || 'Not specified'}`,
+      `Address line 1: ${form.addressLine1}`,
+      `Address line 2: ${form.addressLine2 || 'Not provided'}`,
       `Preferred lab: ${form.preferredLab || 'Not specified'}`,
       `Requested date: ${form.requestedDate || 'Not specified'}`,
       `Preferred time window: ${form.preferredTimeWindow || 'Not specified'}`,
@@ -653,7 +668,6 @@ function IntakePage() {
           email: form.email,
           message,
           requestType: 'intake',
-          serviceArea: form.serviceArea,
           preferredDate: form.requestedDate,
           preferredTimeWindow: form.preferredTimeWindow,
           hasKit: form.hasKit,
@@ -735,30 +749,27 @@ function IntakePage() {
 
             <label>
               Service address
-              <input
-                value={form.address}
-                onChange={(event) => setForm({ ...form, address: event.target.value })}
+              <textarea
+                rows={3}
+                value={form.addressLine1}
+                onChange={(event) => setForm({ ...form, addressLine1: event.target.value })}
                 autoComplete="street-address"
                 required
               />
               <span className="field-help">Home, job, office, facility, or approved care setting.</span>
             </label>
 
+            <label>
+              Address details
+              <textarea
+                rows={2}
+                value={form.addressLine2}
+                onChange={(event) => setForm({ ...form, addressLine2: event.target.value })}
+                placeholder="Gate number, apartment, entry instructions, parking notes, or floor."
+              />
+            </label>
+
             <div className="form-grid">
-              <label>
-                Service area
-                <select
-                  value={form.serviceArea}
-                  onChange={(event) => setForm({ ...form, serviceArea: event.target.value })}
-                  required
-                >
-                  <option value="">Select service area</option>
-                  {serviceAreaOptions.map((area) => (
-                    <option key={area} value={area}>{area}</option>
-                  ))}
-                  <option value="Other">Other / not sure</option>
-                </select>
-              </label>
               <label>
                 Preferred lab
                 <select
@@ -775,57 +786,29 @@ function IntakePage() {
               </label>
             </div>
 
-            <div className="booking-calendar" aria-label="Visit availability calendar">
-              <div className="calendar-header">
-                <button
-                  className="calendar-nav"
-                  type="button"
-                  onClick={() => setVisibleMonth(addMonths(visibleMonth, -1))}
-                  disabled={getMonthKey(visibleMonth) <= getMonthKey(startOfMonth(new Date()))}
-                  aria-label="Previous month"
-                >
-                  ‹
-                </button>
+            <div className="booking-calendar" aria-label="Visit availability picker">
+              <div className="rolling-picker-header">
                 <div>
-                  <strong>{visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</strong>
+                  <strong>Choose a visit date</strong>
                   <span>{selectedDateLabel}</span>
                 </div>
-                <button
-                  className="calendar-nav"
-                  type="button"
-                  onClick={() => setVisibleMonth(addMonths(visibleMonth, 1))}
-                  aria-label="Next month"
-                >
-                  ›
-                </button>
+                <small>Monday-Friday only</small>
               </div>
 
-              <div className="calendar-weekdays" aria-hidden="true">
-                {weekdayLabels.map((day) => (
-                  <span key={day}>{day}</span>
-                ))}
-              </div>
-
-              <div className="calendar-grid">
-                {calendarDays.map((date, index) => {
-                  if (!date) {
-                    return <span key={`empty-${index}`} className="calendar-day-empty" aria-hidden="true" />;
-                  }
-
+              <div className="date-rolodex" aria-label="Available weekdays">
+                {rollingDates.map((date) => {
                   const dateKey = getLocalDateKey(date);
                   const blockedForDate = unavailableByDate[dateKey] || new Set<string>();
                   const unavailableForDate = getUnavailableWindows(blockedForDate, form.hasKit);
-                  const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
-                  const isPast = dateKey < todayKey;
                   const isFull = timeWindowOptions.every((window) => unavailableForDate.has(window));
-                  const isDisabled = !isCurrentMonth || isPast || isFull;
+                  const openCount = timeWindowOptions.length - unavailableForDate.size;
 
                   return (
                     <button
                       key={dateKey}
-                      className={`calendar-day ${form.requestedDate === dateKey ? 'selected' : ''}`}
+                      className={`date-option ${form.requestedDate === dateKey ? 'selected' : ''}`}
                       type="button"
-                      disabled={isDisabled}
+                      disabled={isFull}
                       onClick={() => {
                         setForm({
                           ...form,
@@ -836,10 +819,9 @@ function IntakePage() {
                         });
                       }}
                     >
-                      <span>{date.getDate()}</span>
-                      {isCurrentMonth && !isPast && (
-                        <small>{isFull ? 'Full' : `${timeWindowOptions.length - unavailableForDate.size} open`}</small>
-                      )}
+                      <span>{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                      <strong>{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</strong>
+                      <small>{isFull ? 'Full' : `${openCount} open`}</small>
                     </button>
                   );
                 })}
@@ -878,7 +860,6 @@ function IntakePage() {
                   type="checkbox"
                   checked={form.prescriptionReady}
                   onChange={(event) => setForm({ ...form, prescriptionReady: event.target.checked })}
-                  required
                 />
                 I have a prescription, lab order, or provider instructions.
               </label>
@@ -898,7 +879,6 @@ function IntakePage() {
                 rows={5}
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                required
               />
             </label>
 
@@ -918,8 +898,12 @@ function IntakePage() {
       {showConfirmation && (
         <div className="modal-backdrop" role="presentation">
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
-            <h2 id="confirmation-title">Visit request received</h2>
-            <p>{appointmentConfirmationNote}</p>
+            <h2 id="confirmation-title">Thank you, {form.fullName}</h2>
+            <p>
+              Your visit request for {formatScheduleDate(form.requestedDate)} during {form.preferredTimeWindow} was
+              received.
+            </p>
+            <p>Appointments must be canceled at least 24 hours in advance.</p>
             <p>A confirmation email has been sent to {form.email}.</p>
             <button className="btn primary" type="button" onClick={() => setShowConfirmation(false)}>
               Close
@@ -927,6 +911,119 @@ function IntakePage() {
           </div>
         </div>
       )}
+    </main>
+  );
+}
+
+function CancelPage() {
+  const [details, setDetails] = useState<CancellationDetails | null>(null);
+  const [reason, setReason] = useState('');
+  const [status, setStatus] = useState<'loading' | 'idle' | 'sending' | 'success' | 'error'>('loading');
+  const [statusMessage, setStatusMessage] = useState('Loading appointment request...');
+  const token = new URLSearchParams(window.location.search).get('token') || '';
+
+  useEffect(() => {
+    if (!token) {
+      setStatus('error');
+      setStatusMessage('This cancellation link is missing appointment details.');
+      return;
+    }
+
+    fetch(`/api/contact/cancel/${encodeURIComponent(token)}`)
+      .then(async (response) => {
+        const result = (await response.json().catch(() => ({}))) as CancellationDetails & { message?: string };
+        if (!response.ok) {
+          throw new Error(result.message || 'Appointment request could not be found.');
+        }
+        setDetails(result);
+        setStatus('idle');
+        setStatusMessage('');
+      })
+      .catch((error) => {
+        setStatus('error');
+        setStatusMessage(error instanceof Error ? error.message : 'Appointment request could not be found.');
+      });
+  }, [token]);
+
+  const handleCancel = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('sending');
+    setStatusMessage('Submitting cancellation...');
+
+    try {
+      const response = await fetch(`/api/contact/cancel/${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Cancellation could not be completed online.');
+      }
+
+      setStatus('success');
+      setStatusMessage('Your appointment request was canceled. M.R.S. Medical Services has been notified.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Cancellation could not be completed online.');
+    }
+  };
+
+  return (
+    <main>
+      <PageHero title="Cancel appointment request.">
+        <p>Review your visit request before submitting a cancellation.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap cancel-layout">
+          <form className="contact-form cancel-panel" onSubmit={handleCancel}>
+            <h2>Appointment details</h2>
+            {details && (
+              <div className="cancel-summary">
+                <p><strong>Name:</strong> {details.fullName}</p>
+                <p><strong>Date:</strong> {formatScheduleDate(details.preferredDate)}</p>
+                <p><strong>Time:</strong> {details.preferredTimeWindow}</p>
+                <p><strong>Phone:</strong> {details.phone}</p>
+              </div>
+            )}
+
+            {details?.canCancel && status !== 'success' && (
+              <>
+                <label>
+                  Reason for cancellation
+                  <textarea
+                    rows={5}
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    required
+                  />
+                </label>
+                <button className="btn primary" type="submit" disabled={status === 'sending'}>
+                  {status === 'sending' ? 'Canceling...' : 'Confirm Cancellation'}
+                </button>
+              </>
+            )}
+
+            {details && !details.canCancel && (
+              <div className="notice-card" role="note">
+                <strong>Call to cancel</strong>
+                <p>
+                  This appointment request can no longer be canceled online because less than 24 hours remain.
+                  Please call <a href="tel:+19084637457">(908) 463-7457</a>.
+                </p>
+              </div>
+            )}
+
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+          </form>
+        </div>
+      </section>
     </main>
   );
 }
@@ -1412,26 +1509,6 @@ function formatScheduleDate(value: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function getCalendarDays(monthDate: Date): Array<Date | null> {
-  const firstDay = startOfMonth(monthDate);
-  const days: Array<Date | null> = Array.from({ length: Math.max(firstDay.getDay() - 1, 0) }, () => null);
-  const cursor = new Date(firstDay);
-
-  while (cursor.getMonth() === monthDate.getMonth()) {
-    const day = cursor.getDay();
-    if (day !== 0 && day !== 6) {
-      days.push(new Date(cursor));
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  while (days.length % 5 !== 0) {
-    days.push(null);
-  }
-
-  return days;
-}
-
 function getTimeWindowStartHour(value: string) {
   const match = value.match(/^(\d+)\s(AM|PM)/);
   if (!match) return 0;
@@ -1451,16 +1528,30 @@ function getUnavailableWindows(blockedWindows: Set<string>, hasKit: boolean) {
   );
 }
 
-function startOfMonth(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), 1);
+function getRollingVisitDates(startDate: Date, count: number) {
+  const dates: Date[] = [];
+  const cursor = new Date(startDate);
+
+  while (dates.length < count) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) {
+      dates.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dates;
 }
 
-function addMonths(value: Date, amount: number) {
-  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
-}
+function isAdultPatient(dateOfBirth: string) {
+  if (!dateOfBirth) return false;
 
-function getMonthKey(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+  const birthDate = new Date(`${dateOfBirth}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return false;
+
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 19);
+  return birthDate <= cutoff;
 }
 
 function getLocalDateKey(value: Date) {
@@ -1505,8 +1596,9 @@ export default function App() {
 
   const navigate = (page: PageKey) => {
     const item = navItems.find((navItem) => navItem.key === page);
-    if (!item) return;
-    window.history.pushState(null, '', item.path);
+    if (!item && page !== 'cancel') return;
+    const path = item?.path || '/cancel';
+    window.history.pushState(null, '', path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setActivePage(page);
   };
@@ -1520,6 +1612,7 @@ export default function App() {
       {activePage === 'about' && <AboutPage onNavigate={navigate} />}
       {activePage === 'contact' && <ContactPage />}
       {activePage === 'admin' && <AdminPage />}
+      {activePage === 'cancel' && <CancelPage />}
       <Footer onNavigate={navigate} />
     </div>
   );
