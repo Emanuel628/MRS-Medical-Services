@@ -747,10 +747,6 @@ a {
   gap: 12px;
 }
 
-.insurance-option-hidden {
-  display: none;
-}
-
 .payment-methods legend {
   padding: 0 6px;
   color: var(--navy-deep);
@@ -770,6 +766,10 @@ a {
   letter-spacing: 0;
   line-height: 1.35;
   text-transform: none;
+}
+
+.payment-methods .insurance-option-hidden {
+  display: none;
 }
 
 .payment-methods input {
