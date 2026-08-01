@@ -163,6 +163,11 @@ a {
   text-transform: uppercase;
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: .68;
+}
+
 .primary {
   background: var(--navy-deep);
   color: var(--white);
@@ -362,6 +367,18 @@ a {
 .contact-form textarea {
   resize: vertical;
   padding: 12px;
+}
+
+.form-status {
+  margin: 0;
+  color: var(--teal-dark);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.form-status-error {
+  color: #9f102e;
 }
 
 .contact-card a {

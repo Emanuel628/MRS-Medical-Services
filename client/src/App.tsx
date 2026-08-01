@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 type PageKey = 'home' | 'services' | 'about' | 'contact';
 
@@ -263,20 +263,35 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 
 function ContactPage() {
   const [form, setForm] = useState({ name: '', phone: '', email: '', message: '' });
+  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
 
-  const mailtoHref = useMemo(() => {
-    const body = [
-      `Name: ${form.name}`,
-      `Phone: ${form.phone}`,
-      `Email: ${form.email}`,
-      '',
-      form.message,
-    ].join('\n');
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('sending');
+    setStatusMessage('Sending your message...');
 
-    return `mailto:dirving.mrsms@gmail.com?subject=${encodeURIComponent(
-      'M.R.S. Medical Services visit request',
-    )}&body=${encodeURIComponent(body)}`;
-  }, [form]);
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Message could not be sent right now.');
+      }
+
+      setForm({ name: '', phone: '', email: '', message: '' });
+      setStatus('success');
+      setStatusMessage('Your message was sent. M.R.S. Medical Services will follow up soon.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Message could not be sent right now.');
+    }
+  };
 
   return (
     <main>
@@ -289,13 +304,14 @@ function ContactPage() {
 
       <section className="section">
         <div className="wrap contact-layout">
-          <form className="contact-form">
+          <form className="contact-form" onSubmit={handleSubmit}>
             <label>
               Name
               <input
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
                 autoComplete="name"
+                required
               />
             </label>
             <label>
@@ -304,6 +320,7 @@ function ContactPage() {
                 value={form.phone}
                 onChange={(event) => setForm({ ...form, phone: event.target.value })}
                 autoComplete="tel"
+                required
               />
             </label>
             <label>
@@ -322,9 +339,17 @@ function ContactPage() {
                 value={form.message}
                 onChange={(event) => setForm({ ...form, message: event.target.value })}
                 placeholder="Tell us what type of collection you need, your general location, and preferred timing."
+                required
               />
             </label>
-            <a className="btn primary" href={mailtoHref}>Open Email Message</a>
+            <button className="btn primary" type="submit" disabled={status === 'sending'}>
+              {status === 'sending' ? 'Sending...' : 'Send Message'}
+            </button>
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
           </form>
 
           <aside className="contact-card">
