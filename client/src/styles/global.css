@@ -473,45 +473,23 @@ a {
   stroke-width: 2.5;
 }
 
-.review-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px;
+.trust-copy {
+  max-width: 560px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
 }
 
-.review-card {
-  min-width: 0;
-  padding: 30px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--white);
-  box-shadow: 0 18px 42px rgba(11, 41, 69, .07);
-}
-
-.stars {
-  display: flex;
-  gap: 5px;
-  margin-bottom: 18px;
-}
-
-.star-icon {
-  width: 19px;
-  height: 19px;
-  color: var(--teal-dark);
-  fill: currentColor;
-}
-
-.review-card p {
-  margin: 0 0 22px;
-  color: var(--ink);
-  font-size: 16px;
-  line-height: 1.6;
-}
-
-.review-card strong {
+.trust-copy h3 {
+  margin: 0 0 12px;
   color: var(--navy-deep);
-  font-size: 14px;
-  letter-spacing: .04em;
+  font: 700 28px / 1.12 Georgia, 'Times New Roman', serif;
+}
+
+.trust-copy p {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.62;
 }
 
 .content-block .btn {
@@ -850,6 +828,12 @@ a {
   font: 700 28px / 1.05 Georgia, 'Times New Roman', serif;
 }
 
+.checkout-total small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .payment-warning {
   margin: 0;
   padding: 10px 12px;
@@ -859,7 +843,6 @@ a {
   font-size: 13px;
   font-weight: 400;
   line-height: 1.4;
-  text-transform: none;
 }
 
 .payment-warning strong {
@@ -871,16 +854,6 @@ a {
   padding: 16px;
   border: 1px solid var(--border);
   background: #f8fcfd;
-}
-
-.dob-rolodex {
-  display: grid;
-  grid-template-columns: 1.25fr .8fr .9fr;
-  gap: 8px;
-}
-
-.dob-rolodex select {
-  min-width: 0;
 }
 
 .booking-calendar {
@@ -1640,8 +1613,7 @@ a {
 
   .steps,
   .service-list,
-  .info-grid,
-  .review-grid {
+  .info-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1710,10 +1682,6 @@ a {
     height: 58px;
     flex-basis: 58px;
     padding: 13px;
-  }
-
-  .review-card {
-    padding: 24px;
   }
 }
 

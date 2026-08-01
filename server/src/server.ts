@@ -67,6 +67,7 @@ app.use('/api/admin', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 }));
+app.use('/api/contact/stripe-webhook', express.raw({ type: 'application/json', limit: '100kb' }));
 app.use(express.json({ limit: '100kb' }));
 app.use((request, response, next) => {
   if (request.path.startsWith('/api')) {

@@ -32,13 +32,8 @@ const statRushFeeCents = 2500;
 const weekendHolidayFeeCents = 2500;
 const earlyMorningOrEveningFeeCents = 2500;
 const defaultAdditionalPatientFeeCents = 3500;
-const pricingOrigin = {
-  address: '373 Heritage Way, Tuckerton, NJ 08087',
-  lat: 39.6043,
-  lng: -74.3401,
-};
 const zipCentroids: Record<string, { lat: number; lng: number }> = {
-  '08087': { lat: 39.6043, lng: -74.3401 },
+  '08087': { lat: 39.60, lng: -74.35 },
   '077': { lat: 40.35, lng: -74.08 },
   '080': { lat: 39.82, lng: -74.87 },
   '081': { lat: 39.94, lng: -75.10 },
@@ -47,6 +42,14 @@ const zipCentroids: Record<string, { lat: number; lng: number }> = {
   '087': { lat: 39.92, lng: -74.20 },
   '088': { lat: 40.55, lng: -74.45 },
 };
+
+function getConfiguredPricingOrigin() {
+  const lat = Number(process.env.SERVICE_ORIGIN_LATITUDE);
+  const lng = Number(process.env.SERVICE_ORIGIN_LONGITUDE);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+
+  return zipCentroids['08087'];
+}
 
 function cleanNumber(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -130,7 +133,7 @@ function estimateOneWayTravelMinutes(zipCode: string | null | undefined) {
 
   if (!destination) return null;
 
-  const miles = getDistanceMiles(pricingOrigin, destination);
+  const miles = getDistanceMiles(getConfiguredPricingOrigin(), destination);
   return Math.ceil(miles * 1.55 + 8);
 }
 

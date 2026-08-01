@@ -1,8 +1,9 @@
 import { Router, type Request } from 'express';
 import { Resend } from 'resend';
+import type Stripe from 'stripe';
 import { calculateIntakeVisitPrice, calculateVisitPrice } from '../config/pricing.js';
 import { pool } from '../config/database.js';
-import { getStripeClient, getStripeCurrency } from '../config/stripe.js';
+import { getStripeClient, getStripeCurrency, getStripeWebhookSecret } from '../config/stripe.js';
 
 const router = Router();
 
@@ -17,7 +18,6 @@ type ContactRequest = {
   preferredDate?: string;
   preferredTimeWindow?: string;
   hasKit?: boolean;
-  dateOfBirth?: string;
   streetAddress?: string;
   addressDetails?: string;
   town?: string;
@@ -71,6 +71,7 @@ const appointmentConfirmationNote =
   'Appointment requests must be confirmed by M.R.S. Medical Services. Requests that are not confirmed will be canceled. Appointments must be canceled at least 24 hours in advance.';
 const kitScheduleNote = 'Specialty kit collections must be scheduled before 10 AM.';
 const reminderIntervalMs = 60 * 60 * 1000;
+const checkoutReservationMinutes = 30;
 let remindersStarted = false;
 
 function cleanField(value: unknown) {
@@ -151,6 +152,34 @@ export async function ensureDatabase() {
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS contact_requests_patient_confirm_token_idx ON contact_requests (patient_confirm_token)');
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS contact_requests_mrsms_decision_token_idx ON contact_requests (mrsms_decision_token)');
   await pool.query('CREATE INDEX IF NOT EXISTS contact_requests_preferred_date_idx ON contact_requests (preferred_date)');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS appointment_slot_reservations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      contact_request_id UUID NOT NULL REFERENCES contact_requests(id) ON DELETE CASCADE,
+      stripe_checkout_session_id TEXT,
+      preferred_date DATE NOT NULL,
+      preferred_time_window TEXT NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'reserved',
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS appointment_slot_reservations_date_idx ON appointment_slot_reservations (preferred_date)');
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS appointment_slot_reservations_active_slot_idx
+    ON appointment_slot_reservations (preferred_date, preferred_time_window)
+    WHERE status IN ('reserved', 'held', 'confirmed')
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      contact_request_id UUID,
+      stripe_checkout_session_id TEXT,
+      processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
   databaseReady = true;
 }
 
@@ -331,7 +360,6 @@ function renderIntakeNotificationEmail({
   const patientCount = cleanOptionalNumber(body.patientCount) || 1;
   const rows = [
     ['Scheduling contact', cleanField(body.name)],
-    ['Date of birth', formatAppointmentDate(cleanField(body.dateOfBirth))],
     ['Phone', cleanField(body.phone)],
     ['Email', cleanField(body.email) || 'Not provided'],
     ['Group appointment', patientCount > 1 ? 'Yes' : 'No'],
@@ -450,6 +478,24 @@ function getPaymentStatus(paymentMethod: string, checkoutUrl?: string) {
   return 'pay_at_site';
 }
 
+function isUniqueSlotConflict(error: unknown) {
+  return typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === '23505';
+}
+
+async function expireStaleReservations(queryable: { query: (text: string, params?: unknown[]) => Promise<unknown> }) {
+  await queryable.query(`
+    UPDATE appointment_slot_reservations
+    SET status = 'expired',
+      updated_at = NOW()
+    WHERE status = 'reserved'
+      AND expires_at IS NOT NULL
+      AND expires_at <= NOW()
+  `);
+}
+
 function getInsuranceDetails(body: ContactRequest) {
   return {
     provider: cleanField(body.insuranceProvider),
@@ -468,6 +514,15 @@ async function updatePaymentStatus(id: string, paymentStatus: string, checkoutSe
      WHERE id = $1`,
     [id, paymentStatus, checkoutSessionId || null],
   );
+  if (checkoutSessionId) {
+    await pool.query(
+      `UPDATE appointment_slot_reservations
+       SET stripe_checkout_session_id = $2,
+         updated_at = NOW()
+       WHERE contact_request_id = $1`,
+      [id, checkoutSessionId],
+    );
+  }
 }
 
 function formatMoneyFromCents(value: number | null | undefined) {
@@ -556,6 +611,98 @@ async function createPatientCheckoutSession(request: Request, savedRequest: Save
   return session.url;
 }
 
+function getSessionPaymentDetails(session: Stripe.Checkout.Session) {
+  const paymentIntent = session.payment_intent;
+  const paymentIntentId = typeof paymentIntent === 'string' ? paymentIntent : paymentIntent?.id || null;
+  const latestCharge = typeof paymentIntent === 'object' && paymentIntent && 'latest_charge' in paymentIntent
+    ? paymentIntent.latest_charge
+    : null;
+  const receiptUrl = typeof latestCharge === 'object' && latestCharge && 'receipt_url' in latestCharge
+    ? latestCharge.receipt_url || null
+    : null;
+
+  return {
+    paymentIntentId,
+    receiptUrl,
+  };
+}
+
+async function confirmPaidCheckoutSession(session: Stripe.Checkout.Session) {
+  if (session.payment_status !== 'paid' || !session.client_reference_id) return null;
+
+  await ensureDatabase();
+  const result = await pool.query<CancellationRow>(
+    `UPDATE contact_requests
+     SET payment_status = 'paid',
+       stripe_checkout_session_id = $2,
+       status = 'mrsms_confirmed',
+       mrsms_confirmed_at = COALESCE(mrsms_confirmed_at, NOW()),
+       updated_at = NOW()
+     WHERE id = $1
+       AND request_type = 'intake'
+       AND canceled_at IS NULL
+       AND auto_cancelled_at IS NULL
+       AND payment_status IS DISTINCT FROM 'paid'
+     RETURNING
+       full_name AS "fullName",
+       email,
+       phone,
+       preferred_date AS "preferredDate",
+       preferred_time_window AS "preferredTimeWindow",
+       status,
+       cancel_token AS "cancelToken"`,
+    [session.client_reference_id, session.id],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+
+  await pool.query(
+    `UPDATE appointment_slot_reservations
+     SET status = 'confirmed',
+       stripe_checkout_session_id = $2,
+       expires_at = NULL,
+       updated_at = NOW()
+     WHERE contact_request_id = $1`,
+    [session.client_reference_id, session.id],
+  );
+
+  return row;
+}
+
+async function expireCheckoutSessionReservation(session: Stripe.Checkout.Session) {
+  if (!session.client_reference_id) return;
+
+  await ensureDatabase();
+  await pool.query(
+    `UPDATE contact_requests
+     SET payment_status = CASE WHEN payment_status = 'checkout_pending' THEN 'checkout_expired' ELSE payment_status END,
+       updated_at = NOW()
+     WHERE id = $1
+       AND request_type = 'intake'
+       AND payment_status <> 'paid'`,
+    [session.client_reference_id],
+  );
+  await pool.query(
+    `UPDATE appointment_slot_reservations
+     SET status = 'expired',
+       updated_at = NOW()
+     WHERE contact_request_id = $1
+       AND status = 'reserved'`,
+    [session.client_reference_id],
+  );
+}
+
+async function releasePendingCheckoutReservation(contactRequestId: string) {
+  await pool.query(
+    `UPDATE appointment_slot_reservations
+     SET status = 'expired',
+       updated_at = NOW()
+     WHERE contact_request_id = $1
+       AND status = 'reserved'`,
+    [contactRequestId],
+  );
+}
+
 export async function saveContactRequest(body: ContactRequest): Promise<SavedContactRequest | null> {
   if (!hasDatabaseUrl()) return null;
 
@@ -597,49 +744,77 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
       })
     : null;
 
-  const result = await pool.query<SavedContactRequest>(
-    `INSERT INTO contact_requests (
-      full_name,
-      email,
-      phone,
-      zip_code,
-      message,
-      request_type,
-      service_area,
-      preferred_date,
-      preferred_time_window,
-      quoted_price_cents,
-      pricing_quote,
-      payment_method,
-      payment_status,
-      insurance_details
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-    RETURNING
-      id,
-      cancel_token AS "cancelToken",
-      patient_confirm_token AS "patientConfirmToken",
-      mrsms_decision_token AS "mrsmsDecisionToken",
-      quoted_price_cents AS "quotedPriceCents"`,
-    [
-      name,
-      email || null,
-      phone,
-      zipCode,
-      message || null,
-      requestType,
-      serviceArea,
-      preferredDate,
-      preferredTimeWindow,
-      priceQuote?.totalCents ?? null,
-      priceQuote ? JSON.stringify(priceQuote) : null,
-      paymentMethod,
-      paymentMethod ? getPaymentStatus(paymentMethod) : null,
-      insuranceDetails ? JSON.stringify(insuranceDetails) : null,
-    ],
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await expireStaleReservations(client);
 
-  return result.rows[0] ?? null;
+    const result = await client.query<SavedContactRequest>(
+      `INSERT INTO contact_requests (
+        full_name,
+        email,
+        phone,
+        zip_code,
+        message,
+        request_type,
+        service_area,
+        preferred_date,
+        preferred_time_window,
+        quoted_price_cents,
+        pricing_quote,
+        payment_method,
+        payment_status,
+        insurance_details
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING
+        id,
+        cancel_token AS "cancelToken",
+        patient_confirm_token AS "patientConfirmToken",
+        mrsms_decision_token AS "mrsmsDecisionToken",
+        quoted_price_cents AS "quotedPriceCents"`,
+      [
+        name,
+        email || null,
+        phone,
+        zipCode,
+        message || null,
+        requestType,
+        serviceArea,
+        preferredDate,
+        preferredTimeWindow,
+        priceQuote?.totalCents ?? null,
+        priceQuote ? JSON.stringify(priceQuote) : null,
+        paymentMethod,
+        paymentMethod ? getPaymentStatus(paymentMethod) : null,
+        insuranceDetails ? JSON.stringify(insuranceDetails) : null,
+      ],
+    );
+
+    const saved = result.rows[0] ?? null;
+    if (saved && requestType === 'intake' && preferredDate && preferredTimeWindow) {
+      const reservationStatus = paymentMethod === 'card' ? 'reserved' : 'held';
+      await client.query(
+        `INSERT INTO appointment_slot_reservations (
+          contact_request_id,
+          preferred_date,
+          preferred_time_window,
+          status,
+          expires_at
+        )
+        VALUES ($1, $2, $3, $4, CASE WHEN $4 = 'reserved' THEN NOW() + ($5 || ' minutes')::INTERVAL ELSE NULL END)`,
+        [saved.id, preferredDate, preferredTimeWindow, reservationStatus, checkoutReservationMinutes],
+      );
+    }
+
+    await client.query('COMMIT');
+    return saved;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 router.post('/', async (request, response) => {
@@ -684,7 +859,13 @@ router.post('/', async (request, response) => {
     savedRequest = await saveContactRequest(body);
   } catch (error) {
     console.error('Contact request save failed', error);
-    response.status(500).json({ message: 'Message could not be saved right now.' });
+    response
+      .status(isUniqueSlotConflict(error) ? 409 : 500)
+      .json({
+        message: isUniqueSlotConflict(error)
+          ? 'That appointment time was just taken. Please choose another available time.'
+          : 'Message could not be saved right now.',
+      });
     return;
   }
 
@@ -694,6 +875,11 @@ router.post('/', async (request, response) => {
       checkoutUrl = savedRequest ? await createPatientCheckoutSession(request, savedRequest, body) : null;
     } catch (error) {
       console.error('Patient Stripe checkout failed', error);
+      if (savedRequest) {
+        await releasePendingCheckoutReservation(savedRequest.id).catch((releaseError) => {
+          console.error('Checkout reservation release failed', releaseError);
+        });
+      }
       response.status(500).json({ message: 'Secure checkout could not be started right now.' });
       return;
     }
@@ -758,6 +944,85 @@ router.post('/', async (request, response) => {
   }
 });
 
+router.post('/stripe-webhook', async (request, response) => {
+  const stripe = getStripeClient();
+  const webhookSecret = getStripeWebhookSecret();
+  const signature = request.header('stripe-signature');
+
+  if (!stripe || !webhookSecret || !signature) {
+    response.status(503).json({ message: 'Stripe webhook is not configured.' });
+    return;
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(request.body, signature, webhookSecret);
+  } catch (error) {
+    console.error('Stripe webhook signature verification failed', error);
+    response.status(400).json({ message: 'Invalid Stripe signature.' });
+    return;
+  }
+
+  try {
+    await ensureDatabase();
+    const inserted = await pool.query(
+      `INSERT INTO stripe_webhook_events (id, event_type)
+       VALUES ($1, $2)
+       ON CONFLICT (id) DO NOTHING`,
+      [event.id, event.type],
+    );
+    if (!inserted.rowCount) {
+      response.json({ received: true, duplicate: true });
+      return;
+    }
+
+    if (event.type === 'checkout.session.completed') {
+      const eventSession = event.data.object as Stripe.Checkout.Session;
+      const session = await stripe.checkout.sessions.retrieve(eventSession.id, {
+        expand: ['payment_intent.latest_charge'],
+      });
+      const row = await confirmPaidCheckoutSession(session);
+      if (row && resend) {
+        const { paymentIntentId, receiptUrl } = getSessionPaymentDetails(session);
+        await sendIntakeReceivedEmail(row, false, {
+          paid: true,
+          amountCents: session.amount_total,
+          transactionId: paymentIntentId || session.id,
+          receiptUrl,
+        });
+      }
+      await pool.query(
+        `UPDATE stripe_webhook_events
+         SET contact_request_id = $2,
+           stripe_checkout_session_id = $3
+         WHERE id = $1`,
+        [event.id, session.client_reference_id || null, session.id],
+      );
+    }
+
+    if (event.type === 'checkout.session.expired') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      await expireCheckoutSessionReservation(session);
+      await pool.query(
+        `UPDATE stripe_webhook_events
+         SET contact_request_id = $2,
+           stripe_checkout_session_id = $3
+         WHERE id = $1`,
+        [event.id, session.client_reference_id || null, session.id],
+      );
+    }
+
+    if (event.type.startsWith('charge.refund') || event.type.startsWith('refund.')) {
+      console.info('Stripe refund webhook received before refund workflow is enabled', event.type);
+    }
+
+    response.json({ received: true });
+  } catch (error) {
+    console.error('Stripe webhook processing failed', error);
+    response.status(500).json({ message: 'Stripe webhook could not be processed.' });
+  }
+});
+
 router.post('/payment-success', async (request, response) => {
   const sessionId = cleanField(request.body?.sessionId);
   if (!sessionId) {
@@ -780,36 +1045,9 @@ router.post('/payment-success', async (request, response) => {
       return;
     }
 
-    const paymentIntent = session.payment_intent;
-    const paymentIntentId = typeof paymentIntent === 'string' ? paymentIntent : paymentIntent?.id || null;
-    const latestCharge = typeof paymentIntent === 'object' && paymentIntent && 'latest_charge' in paymentIntent
-      ? paymentIntent.latest_charge
-      : null;
-    const receiptUrl = typeof latestCharge === 'object' && latestCharge && 'receipt_url' in latestCharge
-      ? latestCharge.receipt_url || null
-      : null;
-
-    await ensureDatabase();
-    const result = await pool.query<CancellationRow>(
-      `UPDATE contact_requests
-       SET payment_status = 'paid',
-         stripe_checkout_session_id = $2,
-         status = 'mrsms_confirmed',
-         mrsms_confirmed_at = COALESCE(mrsms_confirmed_at, NOW()),
-         updated_at = NOW()
-       WHERE id = $1
-       RETURNING
-         full_name AS "fullName",
-         email,
-         phone,
-         preferred_date AS "preferredDate",
-         preferred_time_window AS "preferredTimeWindow",
-         status,
-         cancel_token AS "cancelToken"`,
-      [session.client_reference_id, session.id],
-    );
-    const row = result.rows[0];
+    const row = await confirmPaidCheckoutSession(session);
     if (row && resend) {
+      const { paymentIntentId, receiptUrl } = getSessionPaymentDetails(session);
       await sendIntakeReceivedEmail(row, false, {
         paid: true,
         amountCents: session.amount_total,
@@ -927,6 +1165,15 @@ router.post('/cancel/:token', async (request, response) => {
       WHERE cancel_token = $1`,
       [token, reason],
     );
+    await pool.query(
+      `UPDATE appointment_slot_reservations
+       SET status = 'cancelled',
+         updated_at = NOW()
+       WHERE contact_request_id = (
+         SELECT id FROM contact_requests WHERE cancel_token = $1 LIMIT 1
+       )`,
+      [token],
+    );
 
     if (resend) {
       await resend.emails.send({
@@ -1024,6 +1271,7 @@ router.post('/confirm/:token', async (request, response) => {
         AND canceled_at IS NULL
         AND auto_cancelled_at IS NULL
       RETURNING
+        id,
         full_name AS "fullName",
         email,
         phone,
@@ -1135,6 +1383,7 @@ router.post('/staff-decision/:token', async (request, response) => {
         AND canceled_at IS NULL
         AND auto_cancelled_at IS NULL
       RETURNING
+        id,
         full_name AS "fullName",
         email,
         phone,
@@ -1152,10 +1401,26 @@ router.post('/staff-decision/:token', async (request, response) => {
     }
 
     if (decision === 'confirm') {
+      await pool.query(
+        `UPDATE appointment_slot_reservations
+         SET status = 'confirmed',
+           expires_at = NULL,
+           updated_at = NOW()
+         WHERE contact_request_id = $1`,
+        [row.id],
+      );
       await sendPatientConfirmationRequest(row, 'mrsms-confirmed');
       response.json({ message: 'Appointment confirmed. The patient confirmation email has been sent.' });
       return;
     }
+
+    await pool.query(
+      `UPDATE appointment_slot_reservations
+       SET status = 'cancelled',
+         updated_at = NOW()
+       WHERE contact_request_id = $1`,
+      [row.id],
+    );
 
     if (resend && row.email) {
       await sendEmail({
@@ -1366,6 +1631,15 @@ export async function markRequestConfirmedByMrsms(id: string, request: Request) 
 
   const row = result.rows[0];
   if (!row) return null;
+
+  await pool.query(
+    `UPDATE appointment_slot_reservations
+     SET status = 'confirmed',
+       expires_at = NULL,
+       updated_at = NOW()
+     WHERE contact_request_id = $1`,
+    [row.id],
+  );
 
   if (resend && row.email && row.patientConfirmToken) {
     const confirmUrl = getConfirmUrl(request, row.patientConfirmToken);

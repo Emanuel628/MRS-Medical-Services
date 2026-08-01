@@ -51,20 +51,6 @@ const timeWindowOptions = [
   '1 PM - 2 PM',
 ];
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-const monthOptions = [
-  ['01', 'January'],
-  ['02', 'February'],
-  ['03', 'March'],
-  ['04', 'April'],
-  ['05', 'May'],
-  ['06', 'June'],
-  ['07', 'July'],
-  ['08', 'August'],
-  ['09', 'September'],
-  ['10', 'October'],
-  ['11', 'November'],
-  ['12', 'December'],
-];
 
 type AdminRequest = {
   id: string;
@@ -115,12 +101,6 @@ type AppointmentConfirmationDetails = CancellationDetails & {
   confirmedAt?: string | null;
 };
 
-type DateParts = {
-  year: string;
-  month: string;
-  day: string;
-};
-
 const steps = [
   ['1', 'Request a visit', 'Share your location, preferred timing, and collection needs.'],
   ['2', 'Choose payment', 'Review the visit total and choose card checkout or on-site payment.'],
@@ -139,17 +119,6 @@ const trustItems = [
   'CPR and first aid trained',
   'Insured mobile visits',
   'Patient privacy handled with care',
-];
-
-const reviews = [
-  [
-    'Such a great experience. She was on time, professional, and made me feel so comfortable.',
-    'J. M.',
-  ],
-  [
-    'Having someone come to my home made all the difference. Friendly, efficient, and convenient.',
-    'L. T.',
-  ],
 ];
 
 const appointmentConfirmationNote =
@@ -193,9 +162,9 @@ function getPasswordStrengthLabel(score: number) {
 
 function estimateOneWayTravelMinutes(zipCode: string) {
   const prefix = zipCode.trim().slice(0, 3);
-  const pricingOrigin = { lat: 39.6043, lng: -74.3401 };
+  const pricingOrigin = { lat: 39.60, lng: -74.35 };
   const zipCentroids: Record<string, { lat: number; lng: number }> = {
-    '08087': { lat: 39.6043, lng: -74.3401 },
+    '08087': { lat: 39.60, lng: -74.35 },
     '077': { lat: 40.35, lng: -74.08 },
     '080': { lat: 39.82, lng: -74.87 },
     '081': { lat: 39.94, lng: -75.10 },
@@ -434,7 +403,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       <section className="section reviews-section">
         <div className="wrap reviews-layout">
           <div className="section-title">
-            <span>Trust and reviews</span>
+            <span>Trust</span>
             <h2>Care that feels personal and prepared.</h2>
             <i />
             <ul className="trust-list">
@@ -449,20 +418,12 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
               Learn More About Us
             </button>
           </div>
-          <div className="review-grid">
-            {reviews.map(([quote, author]) => (
-              <article className="review-card" key={author}>
-                <div className="stars" aria-label="Five star review">
-                  <SvgIcon name="star" />
-                  <SvgIcon name="star" />
-                  <SvgIcon name="star" />
-                  <SvgIcon name="star" />
-                  <SvgIcon name="star" />
-                </div>
-                <p>&ldquo;{quote}&rdquo;</p>
-                <strong>- {author}</strong>
-              </article>
-            ))}
+          <div className="trust-copy">
+            <h3>Prepared for the visit before arrival.</h3>
+            <p>
+              Appointment details, lab-order needs, kit timing, and service location are reviewed so the visit
+              can be handled clearly and professionally.
+            </p>
           </div>
         </div>
       </section>
@@ -647,7 +608,7 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <div className="about-note">
               <strong>Background includes</strong>
               <ul className="about-list">
-                <li>18 years of phlebotomy experience</li>
+                <li>Experienced mobile phlebotomy care</li>
                 <li>NCCT certification</li>
                 <li>Rehabilitation facilities</li>
                 <li>Correctional health settings</li>
@@ -795,7 +756,11 @@ function ContactPage() {
 function IntakePage() {
   const [form, setForm] = useState({
     fullName: '',
-    dateOfBirth: '',
+    patientName: '',
+    appointmentFor: 'self',
+    relationshipToPatient: '',
+    patientIsMinor: false,
+    guardianAuthorization: false,
     phone: '',
     email: '',
     streetAddress: '',
@@ -824,12 +789,9 @@ function IntakePage() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showServiceAreaNotice, setShowServiceAreaNotice] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
-  const [dobDraft, setDobDraft] = useState<DateParts>({ year: '', month: '', day: '' });
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(getNextWeekday(new Date())));
   const todayKey = getLocalDateKey(new Date());
   const calendarDays = getCalendarDays(visibleMonth);
-  const dobYears = getDobYears(new Date(), 120);
-  const dobDays = getDaysInMonth(dobDraft.year, dobDraft.month);
   const selectedBlockedWindows = new Set(
     blockedTimes
       .filter((blocked) => getScheduleDateKey(blocked.blockDate) === form.requestedDate)
@@ -843,6 +805,7 @@ function IntakePage() {
   const missingInsurance = attemptedSubmit && form.paymentMethod === 'insurance' &&
     (!form.insuranceProvider || !form.insuranceMemberId || !form.policyholderName);
   const missingTerms = attemptedSubmit && !form.termsAccepted;
+  const isSchedulingForSomeoneElse = form.appointmentFor === 'someone_else';
   const unavailableByDate = blockedTimes.reduce<Record<string, Set<string>>>((availability, blocked) => {
     const key = getScheduleDateKey(blocked.blockDate);
     availability[key] = availability[key] || new Set<string>();
@@ -931,12 +894,6 @@ function IntakePage() {
     }));
   }, [blockedTimes, form.hasKit]);
 
-  const updateDobPart = (part: keyof DateParts, value: string) => {
-    const nextDraft = normalizeDateParts({ ...dobDraft, [part]: value });
-    setDobDraft(nextDraft);
-    setForm({ ...form, dateOfBirth: buildDateValue(nextDraft.year, nextDraft.month, nextDraft.day) });
-  };
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAttemptedSubmit(true);
@@ -947,9 +904,15 @@ function IntakePage() {
       return;
     }
 
-    if (!isAdultPatient(form.dateOfBirth)) {
+    if (isSchedulingForSomeoneElse && (!form.patientName || !form.relationshipToPatient)) {
       setStatus('error');
-      setStatusMessage('Patients must be 19 or older to schedule through the appointment form.');
+      setStatusMessage('Please enter the patient name and your relationship to the patient.');
+      return;
+    }
+
+    if (form.patientIsMinor && !form.guardianAuthorization) {
+      setStatus('error');
+      setStatusMessage('A parent or legal guardian must authorize scheduling for a minor.');
       return;
     }
 
@@ -984,8 +947,12 @@ function IntakePage() {
     const message = [
       'Appointment request',
       '',
-      `Patient name: ${form.fullName}`,
-      `Date of birth: ${form.dateOfBirth}`,
+      `Scheduling contact: ${form.fullName}`,
+      `Appointment for: ${isSchedulingForSomeoneElse ? 'Someone else' : 'Self'}`,
+      `Patient name: ${isSchedulingForSomeoneElse ? form.patientName : form.fullName}`,
+      `Relationship to patient: ${isSchedulingForSomeoneElse ? form.relationshipToPatient : 'Self'}`,
+      `Minor patient: ${form.patientIsMinor ? 'Yes' : 'No'}`,
+      `Parent/legal guardian authorization: ${form.patientIsMinor ? (form.guardianAuthorization ? 'Yes' : 'No') : 'Not applicable'}`,
       `Phone: ${form.phone}`,
       `Email: ${form.email || 'Not provided'}`,
       `Street address: ${form.streetAddress}`,
@@ -1029,7 +996,6 @@ function IntakePage() {
           preferredDate: form.requestedDate,
           preferredTimeWindow: form.preferredTimeWindow,
           hasKit: form.hasKit,
-          dateOfBirth: form.dateOfBirth,
           streetAddress: form.streetAddress,
           addressDetails: form.addressDetails,
           town: form.town,
@@ -1106,51 +1072,13 @@ function IntakePage() {
                 <h2 id="patient-info-title">Scheduling contact</h2>
             <div className="form-grid">
               <label>
-                Full name
+                Contact full name
                 <input
                   value={form.fullName}
                   onChange={(event) => setForm({ ...form, fullName: event.target.value })}
                   autoComplete="name"
                   required
                 />
-              </label>
-              <label>
-                Date of birth
-                <div className="dob-rolodex" role="group" aria-label="Date of birth">
-                  <select
-                    aria-label="Birth month"
-                    value={dobDraft.month}
-                    onChange={(event) => updateDobPart('month', event.target.value)}
-                    required
-                  >
-                    <option value="">Month</option>
-                    {monthOptions.map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="Birth day"
-                    value={dobDraft.day}
-                    onChange={(event) => updateDobPart('day', event.target.value)}
-                    required
-                  >
-                    <option value="">Day</option>
-                    {dobDays.map((day) => (
-                      <option key={day} value={day}>{Number(day)}</option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="Birth year"
-                    value={dobDraft.year}
-                    onChange={(event) => updateDobPart('year', event.target.value)}
-                    required
-                  >
-                    <option value="">Year</option>
-                    {dobYears.map((year) => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                </div>
               </label>
               <label>
                 Phone
@@ -1171,6 +1099,69 @@ function IntakePage() {
                   required
                 />
               </label>
+              <label>
+                Who is this appointment for?
+                <select
+                  value={form.appointmentFor}
+                  onChange={(event) => setForm({
+                    ...form,
+                    appointmentFor: event.target.value,
+                    patientName: event.target.value === 'self' ? '' : form.patientName,
+                    relationshipToPatient: event.target.value === 'self' ? '' : form.relationshipToPatient,
+                  })}
+                  required
+                >
+                  <option value="self">Myself</option>
+                  <option value="someone_else">Someone else</option>
+                </select>
+              </label>
+              {isSchedulingForSomeoneElse && (
+                <>
+                  <label>
+                    Patient full name
+                    <input
+                      value={form.patientName}
+                      onChange={(event) => setForm({ ...form, patientName: event.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Relationship to patient
+                    <input
+                      value={form.relationshipToPatient}
+                      onChange={(event) => setForm({ ...form, relationshipToPatient: event.target.value })}
+                      placeholder="Parent, guardian, caregiver, spouse, or other authorized contact."
+                      required
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+
+            <div className="checkbox-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.patientIsMinor}
+                  onChange={(event) => setForm({
+                    ...form,
+                    patientIsMinor: event.target.checked,
+                    guardianAuthorization: event.target.checked ? form.guardianAuthorization : false,
+                  })}
+                />
+                The patient is under 18.
+              </label>
+              {form.patientIsMinor && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.guardianAuthorization}
+                    onChange={(event) => setForm({ ...form, guardianAuthorization: event.target.checked })}
+                    required
+                  />
+                  I am the parent or legal guardian, or I am authorized by the parent or legal guardian to schedule this visit.
+                </label>
+              )}
             </div>
 
             <div className="form-grid">
@@ -1328,15 +1319,14 @@ function IntakePage() {
                 </div>
                 {form.paymentMethod === 'card' && (
                   <div className="checkout-total" aria-live="polite">
-                    <span>Checkout total</span>
+                    <span>Estimated visit total</span>
                     <strong>{formatCurrency(cardTotal)}</strong>
+                    <small>Based on the service ZIP code and selected visit details.</small>
                   </div>
                 )}
               </div>
               {form.paymentMethod === 'pay_at_site' && (
-                <p className="payment-warning">
-                  Checks and Venmo are <strong>NOT</strong> accepted. On-site payment is processed through Square only.
-                </p>
+                <p className="payment-warning">Checks and Venmo are <strong>NOT</strong> accepted. On-site payment is processed through Square only.</p>
               )}
             </fieldset>
 
@@ -1500,11 +1490,12 @@ function IntakePage() {
             </div>
 
             <label>
-              Notes
+              Collection accommodations or visit details
               <textarea
                 rows={5}
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                placeholder="Please do not include Social Security numbers, diagnoses, insurance IDs, or unrelated medical history."
               />
             </label>
               </section>
@@ -1901,6 +1892,10 @@ function TermsPage() {
             lab order, prescription, kit, provider instruction, identification, and payment method available at
             the appointment.
           </p>
+          <p>
+            A parent or legal guardian may schedule for a minor and must be available for the service when required.
+            Do not schedule for another person unless you are authorized to do so.
+          </p>
 
           <h2>Scheduling and payment</h2>
           <p>
@@ -1908,9 +1903,10 @@ function TermsPage() {
             processed through Square at the visit. Checks and Venmo are not accepted.
           </p>
           <p>
-            Pricing is calculated from submitted appointment details, including service address, requested time,
-            date, and group size when applicable. Group appointments may be scheduled by one contact person;
-            additional group member information is collected on site.
+            Pricing shown during scheduling is an estimated visit total calculated from submitted appointment
+            details, including service ZIP code, requested time, date, and group size when applicable. Group
+            appointments may be scheduled by one contact person; additional group member information is collected
+            on site.
           </p>
           <p>
             Some requests may require direct review if the location, order, kit, group size, or visit details
@@ -1934,7 +1930,8 @@ function TermsPage() {
           <p>
             Information submitted through this website is handled according to the Privacy Policy. Payment card
             details are processed by Stripe for online checkout and are not stored directly by this website.
-            Do not submit another person's information unless you are authorized to schedule for that person.
+            Avoid submitting Social Security numbers, diagnoses, unrelated medical history, or insurance
+            identification numbers through free-text notes.
           </p>
 
           <h2>Contact</h2>
@@ -1962,10 +1959,11 @@ function PrivacyPage() {
         <div className="wrap content-block legal-content">
           <h2>Information collected</h2>
           <p>
-            The website may collect name, date of birth, phone number, email address, service address, requested
-            appointment details, lab preference, prescription or kit status, group size, notes, payment method,
-            and related visit information. If insurance payment is enabled later, insurance information may also
-            be collected.
+            The website may collect scheduling contact information, patient name when the appointment is for
+            another person, relationship to the patient, minor/guardian acknowledgement, phone number, email
+            address, service address, requested appointment details, lab preference, prescription or kit status,
+            group size, notes, payment method, and related visit information. If insurance payment is enabled
+            later, insurance information may also be collected.
           </p>
 
           <h2>How information is used</h2>
@@ -1985,6 +1983,11 @@ function PrivacyPage() {
             Service providers are expected to use information only for the services they provide to M.R.S. Medical
             Services. Payment card numbers are handled by the payment processor and are not stored directly by this
             website.
+          </p>
+          <p>
+            If submitted information is treated as protected health information, vendors that create, receive,
+            maintain, or transmit that information should be reviewed for appropriate business associate agreements
+            before production use.
           </p>
 
           <h2>Sharing</h2>
@@ -2343,7 +2346,10 @@ function AdminRegistrationDecisionPage() {
     try {
       const response = await fetch(`/api/admin/auth/registration/${encodeURIComponent(token)}/decision`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(getAdminToken() ? { Authorization: `Bearer ${getAdminToken()}` } : {}),
+        },
         body: JSON.stringify({ decision }),
       });
       const result = (await response.json().catch(() => ({}))) as { message?: string };
@@ -2988,46 +2994,6 @@ function addMonths(value: Date, amount: number) {
 
 function getMonthKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function getDobYears(today: Date, span: number) {
-  const latestYear = today.getFullYear() - 19;
-  return Array.from({ length: span }, (_, index) => String(latestYear - index));
-}
-
-function getDaysInMonth(year: string, month: string) {
-  const fallbackMonth = Number(month) || 1;
-  const fallbackYear = Number(year) || new Date().getFullYear() - 19;
-  const days = new Date(fallbackYear, fallbackMonth, 0).getDate();
-  return Array.from({ length: days }, (_, index) => String(index + 1).padStart(2, '0'));
-}
-
-function normalizeDateParts(parts: DateParts): DateParts {
-  if (!parts.day) return parts;
-
-  const daysInMonth = getDaysInMonth(parts.year, parts.month);
-  if (daysInMonth.includes(parts.day)) return parts;
-
-  return { ...parts, day: daysInMonth[daysInMonth.length - 1] };
-}
-
-function buildDateValue(year: string, month: string, day: string) {
-  if (!year || !month || !day) return '';
-
-  const daysInMonth = getDaysInMonth(year, month);
-  const safeDay = daysInMonth.includes(day) ? day : daysInMonth[daysInMonth.length - 1];
-  return `${year}-${month}-${safeDay}`;
-}
-
-function isAdultPatient(dateOfBirth: string) {
-  if (!dateOfBirth) return false;
-
-  const birthDate = new Date(`${dateOfBirth}T00:00:00`);
-  if (Number.isNaN(birthDate.getTime())) return false;
-
-  const cutoff = new Date();
-  cutoff.setFullYear(cutoff.getFullYear() - 19);
-  return birthDate <= cutoff;
 }
 
 function getNextWeekday(startDate: Date) {

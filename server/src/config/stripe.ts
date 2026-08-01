@@ -22,3 +22,7 @@ export function getStripeCheckoutUrls() {
     cancelUrl: process.env.STRIPE_CANCEL_URL || `${origin || 'http://localhost:5173'}/dashboard?payment=cancelled`,
   };
 }
+
+export function getStripeWebhookSecret() {
+  return (process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+}

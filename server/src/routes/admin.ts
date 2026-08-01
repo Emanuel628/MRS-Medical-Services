@@ -159,6 +159,11 @@ async function createAdminSession(userId: string) {
   return { token, expiresAt };
 }
 
+async function hasApprovedAdmin() {
+  const result = await pool.query('SELECT 1 FROM admin_users WHERE status = \'approved\' LIMIT 1');
+  return Boolean(result.rowCount);
+}
+
 async function approveBootstrapAdmin(email: string, password: string) {
   const result = await pool.query<{ id: string }>(
     `INSERT INTO admin_users (email, password_hash, status, approved_at)
@@ -389,7 +394,12 @@ router.get('/auth/registration/:token', async (request, response) => {
   try {
     await ensureAuthTables();
     const result = await pool.query(
-      `SELECT email, status, requested_at AS "requestedAt" FROM admin_registration_requests WHERE decision_token = $1 LIMIT 1`,
+      `SELECT email,
+        CASE WHEN status = 'pending' AND requested_at < NOW() - INTERVAL '24 hours' THEN 'expired' ELSE status END AS status,
+        requested_at AS "requestedAt"
+       FROM admin_registration_requests
+       WHERE decision_token = $1
+       LIMIT 1`,
       [cleanField(request.params.token)],
     );
     if (!result.rows[0]) {
@@ -417,8 +427,17 @@ router.post('/auth/registration/:token/decision', async (request, response) => {
 
   try {
     await ensureAuthTables();
-    const pending = await pool.query<{ id: string; email: string; passwordHash: string; status: string }>(
+    if (await hasApprovedAdmin()) {
+      const authorized = await isAuthorizedRequest(request);
+      if (!authorized) {
+        response.status(401).json({ message: 'Sign in as an approved admin before approving or denying account requests.' });
+        return;
+      }
+    }
+
+    const pending = await pool.query<{ id: string; email: string; passwordHash: string; status: string; requestedAt: string }>(
       `SELECT id, email, password_hash AS "passwordHash", status
+        , requested_at AS "requestedAt"
        FROM admin_registration_requests
        WHERE decision_token = $1
        LIMIT 1`,
@@ -431,6 +450,17 @@ router.post('/auth/registration/:token/decision', async (request, response) => {
     }
     if (row.status !== 'pending') {
       response.status(409).json({ message: `This account request was already ${row.status}.` });
+      return;
+    }
+    if (Date.parse(row.requestedAt) < Date.now() - 24 * 60 * 60 * 1000) {
+      await pool.query(
+        `UPDATE admin_registration_requests
+         SET status = 'expired',
+           decided_at = NOW()
+         WHERE id = $1 AND status = 'pending'`,
+        [row.id],
+      );
+      response.status(410).json({ message: 'This account request expired. Ask the user to register again.' });
       return;
     }
 

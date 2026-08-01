@@ -18,6 +18,14 @@ router.get('/blocked-times', async (_request, response) => {
   try {
     await ensureScheduleTables();
     await ensureDatabase();
+    await pool.query(`
+      UPDATE appointment_slot_reservations
+      SET status = 'expired',
+        updated_at = NOW()
+      WHERE status = 'reserved'
+        AND expires_at IS NOT NULL
+        AND expires_at <= NOW()
+    `);
     const result = await pool.query(`
       SELECT
         id,
@@ -50,6 +58,19 @@ router.get('/blocked-times', async (_request, response) => {
         AND mrsms_confirmed_at IS NOT NULL
         AND canceled_at IS NULL
         AND auto_cancelled_at IS NULL
+      UNION ALL
+      SELECT
+        id,
+        preferred_date AS "blockDate",
+        preferred_time_window AS "timeWindow",
+        CASE
+          WHEN status = 'reserved' THEN 'Checkout in progress'
+          ELSE 'Appointment request held'
+        END AS reason,
+        'appointment' AS "source"
+      FROM appointment_slot_reservations
+      WHERE preferred_date >= CURRENT_DATE
+        AND status IN ('reserved', 'held', 'confirmed')
       ORDER BY "blockDate" ASC, "timeWindow" ASC
       LIMIT 120
     `);

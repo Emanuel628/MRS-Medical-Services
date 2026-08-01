@@ -387,3 +387,32 @@ The component structure is for maintainability only. It must not cause the visua
 - [ ] Add verified business content
 - [ ] Accessibility and browser testing
 - [ ] Deploy
+
+## Production Safeguards Review
+
+Implemented before paid appointment launch:
+
+- Stripe checkout reconciliation no longer depends on the customer returning to the website. `/api/contact/stripe-webhook` verifies Stripe signatures, records webhook event IDs idempotently, confirms paid checkout sessions, and expires abandoned checkout reservations.
+- Appointment slot availability is backed by `appointment_slot_reservations` with a database-level unique active slot index. Checkout creates a temporary reservation; pay-at-site creates a held slot; cancellation, denial, expiration, and confirmation update the reservation state.
+- Date of birth collection and the 19-or-older appointment restriction were removed from the public appointment form, submitted payload, admin notification email, and client validation.
+- Unverified testimonial cards and the unverified exact-years experience claim were removed from public copy.
+- The exact pricing origin is no longer hard-coded in source. Configure `SERVICE_ORIGIN_LATITUDE` and `SERVICE_ORIGIN_LONGITUDE` in the deployment environment.
+- Admin registration decision tokens expire after 24 hours. Once an approved admin exists, approval or denial requires an active admin bearer session.
+- A project-level `npm run check` command runs the full client and server build.
+
+Operational items that still need owner/client confirmation:
+
+- Confirm whether M.R.S. Medical Services is acting as a HIPAA covered entity or business associate for each workflow, and document that decision.
+- Confirm Railway, Resend, Stripe, Square, and any future insurance or lab integrations are approved vendors for the data they process. If PHI/ePHI is involved, confirm required business associate agreements before production use.
+- Create a written retention schedule for appointment requests, cancellation records, webhook/payment records, logs, backups, and email copies.
+- Decide whether detailed appointment/request emails are acceptable for the business risk profile or whether email should be reduced to notifications that link into the admin dashboard.
+- Add admin audit logging for account approvals, appointment decisions, cancellations, and record access.
+- Add production monitoring for failed webhooks, failed emails, database errors, reminder-job failures, and unusual admin-login activity.
+- Plan a component split for `client/src/App.tsx` before the next round of large frontend changes.
+
+References used for the privacy/security review:
+
+- HHS HIPAA guidance on cloud service providers and business associate agreements
+- FTC business guidance for protecting personal information
+- New Jersey Division of Consumer Affairs data privacy law FAQ
+- New Jersey identity-theft and breach notification guidance
