@@ -32,13 +32,18 @@ app.use('/api/availability', availabilityRouter);
 app.use(express.static(clientDist, {
   setHeaders: (response, filePath) => {
     if (filePath.endsWith('index.html')) {
-      response.setHeader('Cache-Control', 'no-store');
+      response.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+      return;
+    }
+
+    if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      response.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
     }
   },
 }));
 
 app.get('*', (_request, response) => {
-  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
   response.sendFile(path.join(clientDist, 'index.html'));
 });
 
