@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
-type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'register';
+type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
@@ -8,7 +8,6 @@ const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'intake', label: 'Intake', path: '/intake' },
   { key: 'about', label: 'About', path: '/about' },
   { key: 'contact', label: 'Contact', path: '/contact' },
-  { key: 'register', label: 'Register', path: '/register' },
 ];
 
 const serviceItems = [
@@ -22,15 +21,6 @@ const serviceItems = [
 
 const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
 
-type PatientProfile = {
-  fullName: string;
-  dateOfBirth: string;
-  phone: string;
-  email: string;
-  address: string;
-  preferredLab: string;
-};
-
 const steps = [
   ['1', 'Request a visit', 'Share the basic details and location so the visit can be reviewed.'],
   ['2', 'Confirm the order', 'Have the required lab order, kit, or collection instructions ready.'],
@@ -43,7 +33,6 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/intake')) return 'intake';
   if (pathname.startsWith('/about')) return 'about';
   if (pathname.startsWith('/contact')) return 'contact';
-  if (pathname.startsWith('/register')) return 'register';
   return 'home';
 }
 
@@ -425,7 +414,7 @@ function ContactPage() {
   );
 }
 
-function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
+function IntakePage() {
   const [form, setForm] = useState({
     fullName: '',
     dateOfBirth: '',
@@ -436,7 +425,6 @@ function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     requestedDate: '',
     prescriptionReady: false,
     hasKit: false,
-    createAccount: false,
     notes: '',
   });
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
@@ -459,7 +447,6 @@ function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       `Requested date: ${form.requestedDate || 'Not specified'}`,
       `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
       `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
-      `Interested in account: ${form.createAccount ? 'Yes' : 'No'}`,
       '',
       'Notes:',
       form.notes || 'None',
@@ -483,23 +470,8 @@ function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         throw new Error(result.message || 'Intake form could not be sent right now.');
       }
 
-      if (form.createAccount) {
-        savePatientProfile({
-          fullName: form.fullName,
-          dateOfBirth: form.dateOfBirth,
-          phone: form.phone,
-          email: form.email,
-          address: form.address,
-          preferredLab: form.preferredLab,
-        });
-      }
-
       setStatus('success');
-      setStatusMessage(
-        form.createAccount
-          ? 'Your intake form was sent and your profile was saved on this device.'
-          : 'Your intake form was sent. M.R.S. Medical Services will follow up soon.',
-      );
+      setStatusMessage('Your intake form was sent. M.R.S. Medical Services will follow up soon.');
     } catch (error) {
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Intake form could not be sent right now.');
@@ -510,8 +482,7 @@ function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     <main>
       <PageHero title="Patient intake form.">
         <p>
-          Complete this form before requesting a visit. Creating an account is optional and is not
-          required to book services.
+          Complete this form before requesting a visit. No account is required to book services.
         </p>
       </PageHero>
 
@@ -608,14 +579,6 @@ function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
                 />
                 I have a specialty collection kit.
               </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={form.createAccount}
-                  onChange={(event) => setForm({ ...form, createAccount: event.target.checked })}
-                />
-                Save this information for future visits on this device.
-              </label>
             </div>
 
             <label>
@@ -642,142 +605,12 @@ function IntakePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <h2>Before you submit</h2>
             <p>All blood draws require a prescription, lab order, or kit instructions.</p>
             <p>Normal draws are $80. Additional kits or different provider orders are $20 each.</p>
-            <p>Account creation is optional. You can book services without creating one.</p>
+            <p>Submitting this form sends your request directly to M.R.S. Medical Services.</p>
           </aside>
         </div>
       </section>
     </main>
   );
-}
-
-function RegisterPage() {
-  const [profile, setProfile] = useState<PatientProfile>(() => loadPatientProfile());
-  const [saved, setSaved] = useState(false);
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    savePatientProfile(profile);
-    setSaved(true);
-  };
-
-  return (
-    <main>
-      <PageHero title="Register for repeat visits.">
-        <p>
-          Create an optional profile for repeat visits. This does not replace the intake form and is
-          not required to request service.
-        </p>
-      </PageHero>
-
-      <section className="section">
-        <div className="wrap form-layout">
-          <form className="contact-form" onSubmit={handleSubmit}>
-            <label>
-              Full name
-              <input
-                value={profile.fullName}
-                onChange={(event) => setProfile({ ...profile, fullName: event.target.value })}
-                autoComplete="name"
-                required
-              />
-            </label>
-            <label>
-              Date of birth
-              <input
-                type="date"
-                value={profile.dateOfBirth}
-                onChange={(event) => setProfile({ ...profile, dateOfBirth: event.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Phone
-              <input
-                value={profile.phone}
-                onChange={(event) => setProfile({ ...profile, phone: event.target.value })}
-                autoComplete="tel"
-                required
-              />
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                value={profile.email}
-                onChange={(event) => setProfile({ ...profile, email: event.target.value })}
-                autoComplete="email"
-              />
-            </label>
-            <label>
-              Service address
-              <input
-                value={profile.address}
-                onChange={(event) => setProfile({ ...profile, address: event.target.value })}
-                autoComplete="street-address"
-              />
-            </label>
-            <label>
-              Preferred lab
-              <select
-                value={profile.preferredLab}
-                onChange={(event) => setProfile({ ...profile, preferredLab: event.target.value })}
-              >
-                <option value="">Select if known</option>
-                {labOptions.map((lab) => (
-                  <option key={lab} value={lab}>{lab}</option>
-                ))}
-                <option value="Other">Other / not sure</option>
-              </select>
-            </label>
-            <button className="btn primary" type="submit">Save Profile</button>
-            {saved && <p className="form-status" role="status">Your profile was saved on this device.</p>}
-          </form>
-
-          <aside className="contact-card">
-            <h2>Saved patient info</h2>
-            {profile.fullName || profile.phone || profile.email ? (
-              <dl className="profile-summary">
-                <div><dt>Name</dt><dd>{profile.fullName || 'Not saved'}</dd></div>
-                <div><dt>Date of birth</dt><dd>{profile.dateOfBirth || 'Not saved'}</dd></div>
-                <div><dt>Phone</dt><dd>{profile.phone || 'Not saved'}</dd></div>
-                <div><dt>Email</dt><dd>{profile.email || 'Not saved'}</dd></div>
-                <div><dt>Address</dt><dd>{profile.address || 'Not saved'}</dd></div>
-                <div><dt>Preferred lab</dt><dd>{profile.preferredLab || 'Not saved'}</dd></div>
-              </dl>
-            ) : (
-              <p>No profile is saved on this device yet.</p>
-            )}
-            <p>
-              This profile is stored in this browser for convenience. A full secure account portal
-              can be added later with login, database storage, and privacy controls.
-            </p>
-          </aside>
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function loadPatientProfile(): PatientProfile {
-  const blankProfile = {
-    fullName: '',
-    dateOfBirth: '',
-    phone: '',
-    email: '',
-    address: '',
-    preferredLab: '',
-  };
-
-  try {
-    const savedProfile = window.localStorage.getItem('mrsPatientProfile');
-    return savedProfile ? { ...blankProfile, ...JSON.parse(savedProfile) } : blankProfile;
-  } catch {
-    return blankProfile;
-  }
-}
-
-function savePatientProfile(profile: PatientProfile) {
-  window.localStorage.setItem('mrsPatientProfile', JSON.stringify(profile));
 }
 
 function PageHero({ title, children }: { title: string; children: ReactNode }) {
@@ -813,10 +646,9 @@ export default function App() {
       <Header activePage={activePage} onNavigate={navigate} />
       {activePage === 'home' && <HomePage onNavigate={navigate} />}
       {activePage === 'services' && <ServicesPage onNavigate={navigate} />}
-      {activePage === 'intake' && <IntakePage onNavigate={navigate} />}
+      {activePage === 'intake' && <IntakePage />}
       {activePage === 'about' && <AboutPage onNavigate={navigate} />}
       {activePage === 'contact' && <ContactPage />}
-      {activePage === 'register' && <RegisterPage />}
       <Footer onNavigate={navigate} />
     </div>
   );
