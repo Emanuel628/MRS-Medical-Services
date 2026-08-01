@@ -111,10 +111,7 @@ function Header({ activePage, onNavigate }: { activePage: PageKey; onNavigate: (
             onNavigate('home');
           }}
         >
-          <span className="brand-wordmark">
-            <strong>M.R.S.</strong>
-            <span>Medical Services</span>
-          </span>
+          <img src="/images/mrs-logo.svg" alt="M.R.S. Medical Services" />
         </a>
 
         <nav aria-label="Primary navigation">

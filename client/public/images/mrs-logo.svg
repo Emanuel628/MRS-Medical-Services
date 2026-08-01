@@ -1,35 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 260" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1365 515" role="img" aria-labelledby="title desc">
   <title id="title">M.R.S. Medical Services</title>
-  <desc id="desc">M.R.S. Medical Services logo with a teal heart, blood drop, and phlebotomy needle.</desc>
+  <desc id="desc">M.R.S. Medical Services logo with a heart, blood drop, supportive hand, and ECG line.</desc>
   <defs>
-    <linearGradient id="heartGradient" x1="64" y1="30" x2="236" y2="218" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#128f8b"/>
-      <stop offset="1" stop-color="#0d7774"/>
+    <linearGradient id="navy" x1="80" y1="34" x2="1184" y2="339" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#06265a"/>
+      <stop offset="1" stop-color="#0b2945"/>
     </linearGradient>
-    <linearGradient id="dropGradient" x1="151" y1="79" x2="151" y2="171" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#c4163a"/>
-      <stop offset="1" stop-color="#9f102e"/>
+    <linearGradient id="teal" x1="77" y1="78" x2="451" y2="466" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b9ca2"/>
+      <stop offset="1" stop-color="#128f8b"/>
+    </linearGradient>
+    <linearGradient id="red" x1="252" y1="142" x2="252" y2="333" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#df1228"/>
+      <stop offset="1" stop-color="#b70f1e"/>
     </linearGradient>
   </defs>
 
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M151 218C93 181 46 141 46 91c0-33 25-58 58-58 22 0 39 10 51 29 12-19 30-29 52-29 33 0 58 25 58 58 0 50-48 91-114 127Z"
-      stroke="url(#heartGradient)" stroke-width="14"/>
-    <path d="M151 196C105 165 71 133 71 94c0-22 16-38 38-38 18 0 32 11 42 31 10-20 24-31 42-31 22 0 38 16 38 38 0 39-34 71-80 102Z"
-      stroke="#eef6f8" stroke-width="9"/>
-    <path d="M85 200 247 70" stroke="#0b2945" stroke-width="8"/>
-    <path d="M224 88 254 64" stroke="#128f8b" stroke-width="14"/>
-    <path d="M78 206 55 224" stroke="#128f8b" stroke-width="14"/>
-    <path d="M55 224 43 238" stroke="#0b2945" stroke-width="5"/>
+    <path d="M197 392C104 308 49 224 74 145c17-55 64-82 119-73 36 6 64 25 83 58 22-56 64-91 125-89 69 3 116 55 113 125-4 100-103 175-241 307"
+      stroke="url(#navy)" stroke-width="34"/>
+    <path d="M113 185c17-63 70-89 138-68M321 98c46-35 112-22 143 25 22 34 24 72 6 117"
+      stroke="url(#teal)" stroke-width="16"/>
+    <path d="M111 376c70-68 159-86 266-83 39 2 52-24 65-57"
+      stroke="url(#teal)" stroke-width="33"/>
+    <path d="M199 438c47-41 95-55 147-55 47 0 83-28 105-80"
+      stroke="url(#teal)" stroke-width="37"/>
+    <path d="M358 365c35-8 60-33 76-79M405 342c22-11 37-31 47-60"
+      stroke="#ffffff" stroke-width="12"/>
   </g>
 
-  <path d="M151 76c-19 31-39 57-39 86 0 27 17 45 39 45s39-18 39-45c0-29-20-55-39-86Z"
-    fill="url(#dropGradient)"/>
-  <path d="M162 143c11 25 2 43-19 53 8-16 10-31 5-48-3-10-7-21-12-32 12 8 20 17 26 27Z"
-    fill="#ffffff" opacity=".82"/>
+  <path d="M253 142c-34 66-65 103-65 142 0 50 28 77 65 77s65-27 65-77c0-39-31-76-65-142Z" fill="url(#red)"/>
+  <path d="M220 249c-20 38-12 73 23 91-12-27-10-51 4-79 8-16 13-31 14-47-18 8-32 19-41 35Z" fill="#ffffff" opacity=".9"/>
 
-  <g fill="#0b2945">
-    <text x="318" y="128" font-family="Arial, Helvetica, sans-serif" font-size="94" font-weight="800" letter-spacing="3">M.R.S.</text>
-    <text x="322" y="184" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700" letter-spacing="2.8">MEDICAL SERVICES</text>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="900">
+    <text x="520" y="318" fill="#0b2945" font-size="250" letter-spacing="14">M</text>
+    <circle cx="740" cy="293" r="19" fill="#bd1021"/>
+    <text x="795" y="318" fill="#0b2945" font-size="250" letter-spacing="14">R</text>
+    <circle cx="998" cy="293" r="19" fill="#bd1021"/>
+    <text x="1058" y="318" fill="#0b2945" font-size="250" letter-spacing="14">S</text>
+    <circle cx="1266" cy="293" r="19" fill="#bd1021"/>
   </g>
+
+  <text x="516" y="405" fill="#128f8b" font-family="Arial, Helvetica, sans-serif" font-size="62" font-weight="700" letter-spacing="21">MEDICAL SERVICES</text>
+
+  <path d="M516 449h332l12-26 13 51 16-88 19 112 18-63 10 18h428" fill="none" stroke="#128f8b" stroke-width="4"/>
+  <path d="M848 449h12l13-51 16 88 19-112 18 63 10 18h21" fill="none" stroke="#bd1021" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="516" y="497" fill="#0b2945" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="4">PROFESSIONAL BLOOD DRAWS IN THE COMFORT OF YOUR HOME</text>
 </svg>
