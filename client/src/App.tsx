@@ -1477,7 +1477,6 @@ function IntakePage() {
                       <div className="checkout-total" aria-live="polite">
                         <span>Checkout total</span>
                         <strong>{formatCurrency(cardTotal)}</strong>
-                        <small>Based on the number of people and selected specialty kits.</small>
                       </div>
                     )}
                   </div>
