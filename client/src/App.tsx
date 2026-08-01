@@ -20,6 +20,8 @@ const serviceItems = [
 ];
 
 const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
+const serviceAreaOptions = ['Ocean County', 'Central New Jersey', 'Camden County'];
+const timeWindowOptions = ['6 AM - 8 AM', '8 AM - 10 AM', '10 AM - 12 PM', '12 PM - 2 PM'];
 
 const steps = [
   ['1', 'Request a visit', 'Share the basic details and location so the visit can be reviewed.'],
@@ -113,7 +115,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             simpler way to complete blood work without sitting in a waiting room.
           </p>
           <div className="hero-buttons">
-            <button className="btn primary" type="button" onClick={() => onNavigate('contact')}>
+            <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
               Request a Visit
             </button>
             <a className="btn secondary" href="tel:+19084637457">Call Now</a>
@@ -161,10 +163,10 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap cta-inner">
           <div>
             <h3>Need a mobile blood draw?</h3>
-            <p>Send a message with your location, timing, and collection needs.</p>
+            <p>Start with the intake form so location, timing, and collection needs can be reviewed.</p>
           </div>
-          <button className="btn teal" type="button" onClick={() => onNavigate('contact')}>
-            Contact M.R.S.
+          <button className="btn teal" type="button" onClick={() => onNavigate('intake')}>
+            Request Visit
           </button>
         </div>
       </section>
@@ -247,8 +249,8 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             M.R.S. Medical Services does not diagnose conditions, interpret lab results, or replace
             medical advice from your provider.
           </p>
-          <button className="btn primary" type="button" onClick={() => onNavigate('contact')}>
-            Ask About Service
+          <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
+            Request Visit
           </button>
         </div>
       </section>
@@ -294,10 +296,10 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap cta-inner">
           <div>
             <h3>Questions before scheduling?</h3>
-            <p>Use the contact page to share what you need and where the visit would take place.</p>
+            <p>Use the intake form to share what you need and where the visit would take place.</p>
           </div>
-          <button className="btn teal" type="button" onClick={() => onNavigate('contact')}>
-            Contact Us
+          <button className="btn teal" type="button" onClick={() => onNavigate('intake')}>
+            Request Visit
           </button>
         </div>
       </section>
@@ -421,8 +423,10 @@ function IntakePage() {
     phone: '',
     email: '',
     address: '',
+    serviceArea: '',
     preferredLab: '',
     requestedDate: '',
+    preferredTimeWindow: '',
     prescriptionReady: false,
     hasKit: false,
     notes: '',
@@ -443,8 +447,10 @@ function IntakePage() {
       `Phone: ${form.phone}`,
       `Email: ${form.email || 'Not provided'}`,
       `Address: ${form.address}`,
+      `Service area: ${form.serviceArea || 'Not specified'}`,
       `Preferred lab: ${form.preferredLab || 'Not specified'}`,
       `Requested date: ${form.requestedDate || 'Not specified'}`,
+      `Preferred time window: ${form.preferredTimeWindow || 'Not specified'}`,
       `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
       `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
       '',
@@ -483,7 +489,7 @@ function IntakePage() {
       <PageHero title="Patient intake form.">
         <p>
           Complete this form before requesting a visit. M.R.S. Medical Services will review the
-          details and follow up directly.
+          details, route timing, and availability before confirming an appointment.
         </p>
       </PageHero>
 
@@ -541,6 +547,20 @@ function IntakePage() {
 
             <div className="form-grid">
               <label>
+                Service area
+                <select
+                  value={form.serviceArea}
+                  onChange={(event) => setForm({ ...form, serviceArea: event.target.value })}
+                  required
+                >
+                  <option value="">Select service area</option>
+                  {serviceAreaOptions.map((area) => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                  <option value="Other">Other / not sure</option>
+                </select>
+              </label>
+              <label>
                 Preferred lab
                 <select
                   value={form.preferredLab}
@@ -560,6 +580,18 @@ function IntakePage() {
                   value={form.requestedDate}
                   onChange={(event) => setForm({ ...form, requestedDate: event.target.value })}
                 />
+              </label>
+              <label>
+                Preferred time window
+                <select
+                  value={form.preferredTimeWindow}
+                  onChange={(event) => setForm({ ...form, preferredTimeWindow: event.target.value })}
+                >
+                  <option value="">Select if known</option>
+                  {timeWindowOptions.map((window) => (
+                    <option key={window} value={window}>{window}</option>
+                  ))}
+                </select>
               </label>
             </div>
 
@@ -606,7 +638,7 @@ function IntakePage() {
             <h2>Before you submit</h2>
             <p>All blood draws require a prescription, lab order, or kit instructions.</p>
             <p>Normal draws are $80. Additional kits or different provider orders are $20 each.</p>
-            <p>Submitting this form sends your request directly to M.R.S. Medical Services.</p>
+            <p>Visit requests are reviewed before confirmation so drive time can be planned between appointments.</p>
           </aside>
         </div>
       </section>
