@@ -1083,6 +1083,33 @@ a {
   transform: none;
 }
 
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  background: #f8fcfd;
+}
+
+.segmented-control button {
+  min-height: 42px;
+  border: 0;
+  color: var(--navy-deep);
+  background: transparent;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.segmented-control button.active {
+  color: var(--white);
+  background: var(--teal-dark);
+}
+
+.segmented-control button.danger.active {
+  background: #b70f1e;
+}
+
 .dashboard-shell {
   display: grid;
   gap: 22px;

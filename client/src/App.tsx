@@ -14,6 +14,7 @@ type PageKey =
   | 'adminRegistration'
   | 'cancel'
   | 'confirm'
+  | 'appointmentReview'
   | 'accessibility';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
@@ -201,6 +202,7 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/dashboard')) return 'dashboard';
   if (pathname.startsWith('/cancel')) return 'cancel';
   if (pathname.startsWith('/confirm')) return 'confirm';
+  if (pathname.startsWith('/appointment-review')) return 'appointmentReview';
   if (pathname.startsWith('/accessibility')) return 'accessibility';
   return 'home';
 }
@@ -858,6 +860,14 @@ function IntakePage() {
           preferredDate: form.requestedDate,
           preferredTimeWindow: form.preferredTimeWindow,
           hasKit: form.hasKit,
+          dateOfBirth: form.dateOfBirth,
+          streetAddress: form.streetAddress,
+          addressDetails: form.addressDetails,
+          town: form.town,
+          state: form.state,
+          preferredLab: form.preferredLab,
+          prescriptionReady: form.prescriptionReady,
+          notes: form.notes,
         }),
       });
 
@@ -1396,6 +1406,106 @@ function ConfirmAppointmentPage() {
               </button>
             )}
 
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AppointmentReviewPage() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token') || '';
+  const initialDecision = params.get('decision') === 'deny' ? 'deny' : 'confirm';
+  const [details, setDetails] = useState<CancellationDetails | null>(null);
+  const [decision, setDecision] = useState<'confirm' | 'deny'>(initialDecision);
+  const [status, setStatus] = useState<'loading' | 'idle' | 'sending' | 'success' | 'error'>('loading');
+  const [statusMessage, setStatusMessage] = useState('Loading appointment request...');
+
+  useEffect(() => {
+    if (!token) {
+      setStatus('error');
+      setStatusMessage('This review link is missing appointment details.');
+      return;
+    }
+
+    fetch(`/api/contact/staff-decision/${encodeURIComponent(token)}`)
+      .then(async (response) => {
+        const result = (await response.json().catch(() => ({}))) as CancellationDetails & { message?: string };
+        if (!response.ok) throw new Error(result.message || 'Appointment request could not be found.');
+        setDetails(result);
+        setStatus('idle');
+        setStatusMessage('');
+      })
+      .catch((error) => {
+        setStatus('error');
+        setStatusMessage(error instanceof Error ? error.message : 'Appointment request could not be found.');
+      });
+  }, [token]);
+
+  const submitDecision = async () => {
+    setStatus('sending');
+    setStatusMessage(decision === 'confirm' ? 'Confirming appointment...' : 'Sending denial email...');
+
+    try {
+      const response = await fetch(`/api/contact/staff-decision/${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(result.message || 'Appointment request could not be updated.');
+      setStatus('success');
+      setStatusMessage(result.message || 'Appointment request updated.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Appointment request could not be updated.');
+    }
+  };
+
+  return (
+    <main>
+      <PageHero title="Review appointment.">
+        <p>Confirm or deny this appointment request.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap auth-layout">
+          <div className="confirmation-modal auth-decision-card" role="dialog" aria-modal="true" aria-labelledby="appointment-review-title">
+            <h2 id="appointment-review-title">{decision === 'confirm' ? 'Confirm appointment' : 'Deny appointment'}</h2>
+            {details && (
+              <div className="cancel-summary">
+                <p><strong>Name:</strong> {details.fullName}</p>
+                <p><strong>Date:</strong> {formatScheduleDate(details.preferredDate)}</p>
+                <p><strong>Time:</strong> {details.preferredTimeWindow}</p>
+                <p><strong>Phone:</strong> {details.phone}</p>
+              </div>
+            )}
+            {details && status !== 'success' && (
+              <>
+                <div className="segmented-control" aria-label="Appointment decision">
+                  <button className={decision === 'confirm' ? 'active' : ''} type="button" onClick={() => setDecision('confirm')}>
+                    Confirm
+                  </button>
+                  <button className={decision === 'deny' ? 'active danger' : 'danger'} type="button" onClick={() => setDecision('deny')}>
+                    Deny
+                  </button>
+                </div>
+                <p>
+                  {decision === 'confirm'
+                    ? 'This will send the patient an appointment confirmation email.'
+                    : 'This will send the patient a kind note with a link to reschedule.'}
+                </p>
+                <button className="btn primary" type="button" onClick={() => void submitDecision()} disabled={status === 'sending'}>
+                  {status === 'sending' ? 'Sending...' : decision === 'confirm' ? 'Confirm Appointment' : 'Deny and Send Email'}
+                </button>
+              </>
+            )}
             {statusMessage && (
               <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
                 {statusMessage}
@@ -2314,7 +2424,8 @@ function AdminPage() {
   );
 }
 
-function formatScheduleDate(value: string) {
+function formatScheduleDate(value: string | null | undefined) {
+  if (!value) return 'Not specified';
   const dateKey = getScheduleDateKey(value);
   const [year, month, day] = dateKey.split('-').map(Number);
   const date = year && month && day ? new Date(year, month - 1, day) : new Date(value);
@@ -2456,7 +2567,8 @@ function getLocalDateKey(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function getScheduleDateKey(value: string) {
+function getScheduleDateKey(value: string | null | undefined) {
+  if (!value) return '';
   const dateOnly = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
   if (dateOnly) return dateOnly;
 
@@ -2516,6 +2628,7 @@ export default function App() {
       admin: '/login',
       cancel: '/cancel',
       confirm: '/confirm',
+      appointmentReview: '/appointment-review',
       accessibility: '/accessibility',
       login: '/login',
       register: '/register',
@@ -2547,6 +2660,7 @@ export default function App() {
         {activePage === 'admin' && <AdminPage />}
         {activePage === 'cancel' && <CancelPage />}
         {activePage === 'confirm' && <ConfirmAppointmentPage />}
+        {activePage === 'appointmentReview' && <AppointmentReviewPage />}
         {activePage === 'accessibility' && <AccessibilityPage />}
       </div>
       <Footer onNavigate={navigate} />

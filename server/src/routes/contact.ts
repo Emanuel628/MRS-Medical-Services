@@ -15,12 +15,21 @@ type ContactRequest = {
   preferredDate?: string;
   preferredTimeWindow?: string;
   hasKit?: boolean;
+  dateOfBirth?: string;
+  streetAddress?: string;
+  addressDetails?: string;
+  town?: string;
+  state?: string;
+  preferredLab?: string;
+  prescriptionReady?: boolean;
+  notes?: string;
 };
 
 type SavedContactRequest = {
   id: string;
   cancelToken: string | null;
   patientConfirmToken: string | null;
+  mrsmsDecisionToken: string | null;
 };
 
 type CancellationRow = {
@@ -37,6 +46,7 @@ type CancellationRow = {
   reminderTwoDaySentAt?: string | Date | null;
   reminderOneDaySentAt?: string | Date | null;
   autoCancelledAt?: string | Date | null;
+  mrsmsDecisionToken?: string | null;
 };
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -78,6 +88,7 @@ export async function ensureDatabase() {
       patient_confirm_token UUID UNIQUE DEFAULT gen_random_uuid(),
       patient_confirmed_at TIMESTAMPTZ,
       mrsms_confirmed_at TIMESTAMPTZ,
+      mrsms_decision_token UUID UNIQUE DEFAULT gen_random_uuid(),
       reminder_two_day_sent_at TIMESTAMPTZ,
       reminder_one_day_sent_at TIMESTAMPTZ,
       unconfirmed_notice_sent_at TIMESTAMPTZ,
@@ -96,6 +107,7 @@ export async function ensureDatabase() {
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS patient_confirm_token UUID');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS patient_confirmed_at TIMESTAMPTZ');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS mrsms_confirmed_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS mrsms_decision_token UUID');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS reminder_two_day_sent_at TIMESTAMPTZ');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS reminder_one_day_sent_at TIMESTAMPTZ');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS unconfirmed_notice_sent_at TIMESTAMPTZ');
@@ -104,9 +116,11 @@ export async function ensureDatabase() {
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS cancellation_reason TEXT');
   await pool.query('UPDATE contact_requests SET cancel_token = gen_random_uuid() WHERE cancel_token IS NULL');
   await pool.query('UPDATE contact_requests SET patient_confirm_token = gen_random_uuid() WHERE patient_confirm_token IS NULL');
+  await pool.query('UPDATE contact_requests SET mrsms_decision_token = gen_random_uuid() WHERE mrsms_decision_token IS NULL');
   await pool.query('CREATE INDEX IF NOT EXISTS contact_requests_created_at_idx ON contact_requests (created_at DESC)');
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS contact_requests_cancel_token_idx ON contact_requests (cancel_token)');
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS contact_requests_patient_confirm_token_idx ON contact_requests (patient_confirm_token)');
+  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS contact_requests_mrsms_decision_token_idx ON contact_requests (mrsms_decision_token)');
   await pool.query('CREATE INDEX IF NOT EXISTS contact_requests_preferred_date_idx ON contact_requests (preferred_date)');
   databaseReady = true;
 }
@@ -201,6 +215,17 @@ function getAppointmentLabel(date: string | Date | null, timeWindow: string | nu
   return `${formatAppointmentDate(date)}${timeWindow ? `, ${timeWindow}` : ''}`;
 }
 
+function formatSubmittedAt(value: Date) {
+  return value.toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/New_York',
+  });
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -249,6 +274,103 @@ function renderEmailText(title: string, paragraphs: string[], actions: Array<{ l
     'Thank you,',
     'M.R.S. Medical Services',
   ].join('\n');
+}
+
+function renderIntakeNotificationEmail({
+  body,
+  submittedAt,
+  confirmUrl,
+  denyUrl,
+}: {
+  body: ContactRequest;
+  submittedAt: string;
+  confirmUrl: string;
+  denyUrl: string;
+}) {
+  const appointmentDate = formatAppointmentDate(cleanField(body.preferredDate));
+  const appointmentTime = cleanField(body.preferredTimeWindow) || 'Not specified';
+  const addressLines = [
+    cleanField(body.streetAddress),
+    cleanField(body.addressDetails),
+    [cleanField(body.town), cleanField(body.state), cleanField(body.zipCode)].filter(Boolean).join(', '),
+  ].filter(Boolean);
+  const notes = cleanField(body.notes) || 'None';
+  const rows = [
+    ['Patient name', cleanField(body.name)],
+    ['Date of birth', formatAppointmentDate(cleanField(body.dateOfBirth))],
+    ['Phone', cleanField(body.phone)],
+    ['Email', cleanField(body.email) || 'Not provided'],
+    ['Preferred lab', cleanField(body.preferredLab) || 'Not specified'],
+    ['Prescription/order ready', body.prescriptionReady ? 'Yes' : 'No'],
+    ['Specialty kit', body.hasKit ? 'Yes' : 'No'],
+    ['Submitted', submittedAt],
+  ];
+  const actionText = [
+    confirmUrl ? `Confirm appointment: ${confirmUrl}` : '',
+    denyUrl ? `Deny appointment: ${denyUrl}` : '',
+  ].filter(Boolean).join('\n');
+
+  const html = `
+    <div style="margin:0; padding:0; background:#f5f9fa;">
+      <div style="max-width:680px; margin:0 auto; padding:34px 18px; font-family:Arial, Helvetica, sans-serif; color:#173044;">
+        <div style="background:#ffffff; border:1px solid #dbe7ea; border-radius:8px; overflow:hidden;">
+          <div style="padding:28px 30px; background:#062948; color:#ffffff;">
+            <p style="margin:0 0 8px; color:#7ed6da; font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;">New intake request</p>
+            <h1 style="margin:0; font-family:Georgia, 'Times New Roman', serif; font-size:31px; line-height:1.12;">${escapeHtml(appointmentDate)}</h1>
+            <p style="margin:10px 0 0; font-size:19px; line-height:1.35;">${escapeHtml(appointmentTime)}</p>
+          </div>
+
+          <div style="padding:30px;">
+            <div style="margin:0 0 26px; padding:20px; border:1px solid #dbe7ea; border-left:5px solid #008c95; background:#f8fcfd;">
+              <h2 style="margin:0 0 12px; color:#062948; font-size:18px;">Visit address</h2>
+              ${addressLines.length ? addressLines.map((line) => `<p style="margin:0 0 7px; font-size:16px; line-height:1.45;">${escapeHtml(line)}</p>`).join('') : '<p style="margin:0; font-size:16px;">Not provided</p>'}
+            </div>
+
+            <div style="margin:0 0 26px;">
+              <h2 style="margin:0 0 14px; color:#062948; font-size:18px;">Patient information</h2>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                ${rows.map(([label, value]) => `
+                  <tr>
+                    <td style="padding:10px 12px; border-top:1px solid #e6eef0; color:#607383; width:42%; font-size:14px;">${escapeHtml(label)}</td>
+                    <td style="padding:10px 12px; border-top:1px solid #e6eef0; color:#173044; font-size:15px; font-weight:700;">${escapeHtml(value || 'Not provided')}</td>
+                  </tr>
+                `).join('')}
+              </table>
+            </div>
+
+            <div style="margin:0 0 28px; padding:18px 20px; background:#f8fcfd; border:1px solid #dbe7ea;">
+              <h2 style="margin:0 0 10px; color:#062948; font-size:18px;">Notes</h2>
+              <p style="margin:0; white-space:pre-wrap; font-size:16px; line-height:1.55;">${escapeHtml(notes)}</p>
+            </div>
+
+            <div style="display:block; margin:0 0 10px;">
+              ${confirmUrl ? `<a href="${escapeHtml(confirmUrl)}" style="display:inline-block; margin:0 10px 12px 0; padding:13px 18px; background:#062948; color:#ffffff; text-decoration:none; border-radius:4px; font-weight:700;">Confirm appointment</a>` : ''}
+              ${denyUrl ? `<a href="${escapeHtml(denyUrl)}" style="display:inline-block; margin:0 0 12px 0; padding:13px 18px; background:#ffffff; color:#b70f1e; text-decoration:none; border:1px solid #b70f1e; border-radius:4px; font-weight:700;">Deny appointment</a>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const text = [
+    'New intake request',
+    '',
+    `Appointment date: ${appointmentDate}`,
+    `Appointment time: ${appointmentTime}`,
+    '',
+    'Visit address:',
+    ...(addressLines.length ? addressLines : ['Not provided']),
+    '',
+    ...rows.flatMap(([label, value]) => [`${label}: ${value || 'Not provided'}`]),
+    '',
+    'Notes:',
+    notes,
+    '',
+    actionText,
+  ].join('\n');
+
+  return { html, text };
 }
 
 async function sendEmail({
@@ -314,7 +436,11 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
       preferred_time_window
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    RETURNING id, cancel_token AS "cancelToken", patient_confirm_token AS "patientConfirmToken"`,
+    RETURNING
+      id,
+      cancel_token AS "cancelToken",
+      patient_confirm_token AS "patientConfirmToken",
+      mrsms_decision_token AS "mrsmsDecisionToken"`,
     [name, email || null, phone, zipCode, message || null, requestType, serviceArea, preferredDate, preferredTimeWindow],
   );
 
@@ -341,11 +467,7 @@ router.post('/', async (request, response) => {
   }
 
   const replyTo = email || contactToEmail;
-  const submittedAt = new Date().toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'America/New_York',
-  });
+  const submittedAt = formatSubmittedAt(new Date());
 
   let savedRequest: SavedContactRequest | null = null;
 
@@ -363,19 +485,34 @@ router.post('/', async (request, response) => {
   }
 
   try {
-    await sendEmail({
-      to: contactToEmail,
-      replyTo,
-      subject: `${requestType === 'intake' ? 'New M.R.S. Medical Services intake request' : 'New M.R.S. Medical Services message'} from ${name}`,
-      title: requestType === 'intake' ? 'New intake request' : 'New website message',
-      paragraphs: [
-        `Name: ${name}`,
-        `Phone: ${phone}`,
-        `Email: ${email}`,
-        `Submitted: ${submittedAt}`,
-        message,
-      ],
-    });
+    if (requestType === 'intake') {
+      const decisionToken = savedRequest?.mrsmsDecisionToken;
+      const confirmUrl = decisionToken ? `${getSiteOrigin(request)}/appointment-review?token=${decisionToken}&decision=confirm` : '';
+      const denyUrl = decisionToken ? `${getSiteOrigin(request)}/appointment-review?token=${decisionToken}&decision=deny` : '';
+      const intakeEmail = renderIntakeNotificationEmail({ body, submittedAt, confirmUrl, denyUrl });
+      await resend.emails.send({
+        from: contactFromEmail,
+        to: contactToEmail,
+        replyTo,
+        subject: `New M.R.S. Medical Services intake request for ${getAppointmentLabel(body.preferredDate || '', body.preferredTimeWindow || '')}`,
+        text: intakeEmail.text,
+        html: intakeEmail.html,
+      });
+    } else {
+      await sendEmail({
+        to: contactToEmail,
+        replyTo,
+        subject: `New M.R.S. Medical Services message from ${name}`,
+        title: 'New website message',
+        paragraphs: [
+          `Name: ${name}`,
+          `Phone: ${phone}`,
+          `Email: ${email}`,
+          `Submitted: ${submittedAt}`,
+          message,
+        ],
+      });
+    }
 
     if (requestType === 'intake') {
       const cancelUrl = getCancelUrl(request, savedRequest?.cancelToken);
@@ -643,8 +780,122 @@ router.post('/confirm/:token', async (request, response) => {
   }
 });
 
+router.get('/staff-decision/:token', async (request, response) => {
+  const token = cleanField(request.params.token);
+  if (!token || !isUuid(token)) {
+    response.status(404).json({ message: 'Appointment request could not be found.' });
+    return;
+  }
+
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Appointment review is not configured right now.' });
+    return;
+  }
+
+  try {
+    await ensureDatabase();
+    const result = await pool.query<CancellationRow & { streetAddress?: string | null }>(
+      `SELECT
+        full_name AS "fullName",
+        email,
+        phone,
+        preferred_date AS "preferredDate",
+        preferred_time_window AS "preferredTimeWindow",
+        status,
+        mrsms_confirmed_at AS "patientConfirmedAt"
+      FROM contact_requests
+      WHERE mrsms_decision_token = $1 AND request_type = 'intake'
+      LIMIT 1`,
+      [token],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      response.status(404).json({ message: 'Appointment request could not be found.' });
+      return;
+    }
+
+    response.json(toCancellationDetails(row));
+  } catch (error) {
+    console.error('MRSMS appointment review lookup failed', error);
+    response.status(500).json({ message: 'Appointment request could not be loaded right now.' });
+  }
+});
+
+router.post('/staff-decision/:token', async (request, response) => {
+  const token = cleanField(request.params.token);
+  const decision = cleanField(request.body?.decision);
+  if (!token || !isUuid(token)) {
+    response.status(404).json({ message: 'Appointment request could not be found.' });
+    return;
+  }
+  if (decision !== 'confirm' && decision !== 'deny') {
+    response.status(400).json({ message: 'Choose confirm or deny.' });
+    return;
+  }
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Appointment review is not configured right now.' });
+    return;
+  }
+
+  try {
+    await ensureDatabase();
+    const result = await pool.query<CancellationRow>(
+      `UPDATE contact_requests
+      SET
+        status = $2,
+        mrsms_confirmed_at = CASE WHEN $2 = 'mrsms_confirmed' THEN COALESCE(mrsms_confirmed_at, NOW()) ELSE mrsms_confirmed_at END,
+        canceled_at = CASE WHEN $2 = 'denied' THEN COALESCE(canceled_at, NOW()) ELSE canceled_at END,
+        updated_at = NOW()
+      WHERE mrsms_decision_token = $1
+        AND request_type = 'intake'
+        AND canceled_at IS NULL
+        AND auto_cancelled_at IS NULL
+      RETURNING
+        full_name AS "fullName",
+        email,
+        phone,
+        preferred_date AS "preferredDate",
+        preferred_time_window AS "preferredTimeWindow",
+        status,
+        cancel_token AS "cancelToken",
+        patient_confirm_token AS "patientConfirmToken"`,
+      [token, decision === 'confirm' ? 'mrsms_confirmed' : 'denied'],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      response.status(404).json({ message: 'Appointment request could not be found or has already been closed.' });
+      return;
+    }
+
+    if (decision === 'confirm') {
+      await sendPatientConfirmationRequest(row, 'mrsms-confirmed');
+      response.json({ message: 'Appointment confirmed. The patient confirmation email has been sent.' });
+      return;
+    }
+
+    if (resend && row.email) {
+      await sendEmail({
+        to: row.email,
+        subject: 'M.R.S. Medical Services appointment request update',
+        title: 'Appointment request update',
+        paragraphs: [
+          `Hi ${row.fullName},`,
+          `Thank you for requesting an appointment with M.R.S. Medical Services for ${getAppointmentLabel(row.preferredDate, row.preferredTimeWindow)}.`,
+          'We are sorry, but that appointment time is not available. Please choose another time that works for you.',
+        ],
+        actions: [{ label: 'Request a new appointment', url: `${getConfiguredSiteOrigin()}/intake` }],
+      });
+    }
+
+    response.json({ message: 'Appointment request denied. A rescheduling email has been sent to the patient.' });
+  } catch (error) {
+    console.error('MRSMS appointment decision failed', error);
+    response.status(500).json({ message: 'Appointment request could not be updated right now.' });
+  }
+});
+
 function getConfiguredSiteOrigin() {
-  return cleanField(process.env.CLIENT_ORIGIN).replace(/\/$/, '');
+  return cleanField(process.env.SITE_ORIGIN || process.env.CLIENT_ORIGIN).replace(/\/$/, '');
 }
 
 async function sendPatientConfirmationRequest(row: CancellationRow, reminderStage: 'two-day' | 'one-day' | 'mrsms-confirmed') {
