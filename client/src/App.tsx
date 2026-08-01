@@ -160,12 +160,12 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <p>Service is planned around an approved home, office, or facility visit.</p>
           </article>
           <article>
-            <strong>Clear pricing</strong>
-            <p>Normal blood draws are $80, with additional kit or provider-order fees when needed.</p>
+            <strong>Flexible payment</strong>
+            <p>Visit cost is confirmed before scheduling and may vary based on mileage.</p>
           </article>
           <article>
             <strong>Simple</strong>
-            <p>All you need to start is a prescription, lab order, or collection kit instructions.</p>
+            <p>All you need to start is a prescription, lab order, or provider request.</p>
           </article>
         </div>
       </section>
@@ -233,23 +233,20 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       <section className="section muted">
         <div className="wrap info-grid">
           <article>
-            <span className="eyebrow">Pricing</span>
-            <h2>Simple visit fees.</h2>
+            <span className="eyebrow">Payment</span>
+            <h2>Mileage-based payment.</h2>
             <p>
-              Normal blood draws are $80. Additional kits or orders from a different doctor or
-              provider are $20 each.
+              Visit cost is confirmed before scheduling and may vary based on service location,
+              mileage, and collection needs.
             </p>
-            <p>
-              The mobile collection fee is separate from any laboratory testing charges, insurance
-              billing, or provider fees.
-            </p>
+            <p>Online payment support is planned so confirmed visits can be handled securely.</p>
           </article>
           <article>
             <span className="eyebrow">Requirements</span>
             <h2>Prescription required.</h2>
             <p>
-              A prescription, lab order, or collection kit instructions are required before a blood
-              draw can be completed.
+              A prescription, lab order, or provider request is required before a blood draw can be
+              completed.
             </p>
             <p>Appointments require 24-hour notice for cancellation.</p>
           </article>
@@ -275,7 +272,7 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         <div className="wrap content-block">
           <h2>Before requesting a visit</h2>
           <p>
-            Please have any lab order, kit, provider instructions, or collection paperwork ready.
+            Please have any lab order, provider request, or collection paperwork ready.
             M.R.S. Medical Services does not diagnose conditions, interpret lab results, or replace
             medical advice from your provider.
           </p>
@@ -433,7 +430,7 @@ function ContactPage() {
             <p><strong>Phone:</strong> <a href="tel:+19084637457">(908) 463-7457</a></p>
             <p><strong>Email:</strong> <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a></p>
             <p><strong>Hours:</strong> Monday-Friday, 6 AM-2 PM</p>
-            <p><strong>Pricing:</strong> Normal draws are $80. Additional kits or different provider orders are $20 each.</p>
+            <p><strong>Payment:</strong> Visit cost is confirmed before scheduling.</p>
             <p><strong>Cancellation:</strong> Please provide 24-hour notice.</p>
             <p>
               Do not include sensitive medical information in the first message. Basic scheduling
@@ -662,7 +659,6 @@ function IntakePage() {
                 rows={5}
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                placeholder="Add kit details, access instructions, timing needs, or other notes."
               />
             </label>
 
@@ -678,8 +674,8 @@ function IntakePage() {
 
           <aside className="contact-card">
             <h2>Before you submit</h2>
-            <p>All blood draws require a prescription, lab order, or kit instructions.</p>
-            <p>Normal draws are $80. Additional kits or different provider orders are $20 each.</p>
+            <p>All blood draws require a prescription, lab order, or provider request.</p>
+            <p>Visit cost is confirmed before scheduling and may vary based on mileage.</p>
             <p>Visit requests are reviewed before confirmation so drive time can be planned between appointments.</p>
             {blockedTimes.length > 0 && (
               <div className="availability-list">
