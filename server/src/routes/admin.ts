@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../config/database.js';
-import { ensureDatabase, saveContactRequest } from './contact.js';
+import { ensureDatabase, markRequestConfirmedByMrsms, saveContactRequest } from './contact.js';
 
 const router = Router();
 
@@ -154,6 +154,32 @@ router.post('/manual-intake', async (request, response) => {
   } catch (error) {
     console.error('Manual intake save failed', error);
     response.status(500).json({ message: 'Manual intake could not be saved.' });
+  }
+});
+
+router.post('/contact-requests/:id/confirm', async (request, response) => {
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Database is not configured.' });
+    return;
+  }
+
+  const id = cleanField(request.params.id);
+  if (!id) {
+    response.status(400).json({ message: 'Request id is required.' });
+    return;
+  }
+
+  try {
+    const confirmed = await markRequestConfirmedByMrsms(id, request);
+    if (!confirmed) {
+      response.status(404).json({ message: 'Intake request could not be found or has already been canceled.' });
+      return;
+    }
+
+    response.json({ message: 'Appointment confirmed and patient email sent.', request: confirmed });
+  } catch (error) {
+    console.error('MRSMS confirmation failed', error);
+    response.status(500).json({ message: 'Appointment could not be confirmed right now.' });
   }
 });
 

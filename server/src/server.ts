@@ -6,7 +6,7 @@ import express from 'express';
 import adminRouter from './routes/admin.js';
 import availabilityRouter from './routes/availability.js';
 import healthRouter from './routes/health.js';
-import contactRouter from './routes/contact.js';
+import contactRouter, { startAppointmentReminderJob } from './routes/contact.js';
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
@@ -28,4 +28,5 @@ app.get('*', (_request, response) => {
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`MRS Medical Services running on port ${port}`);
+  startAppointmentReminderJob();
 });

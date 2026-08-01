@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../config/database.js';
 import { ensureScheduleTables } from './admin.js';
+import { ensureDatabase } from './contact.js';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.get('/blocked-times', async (_request, response) => {
 
   try {
     await ensureScheduleTables();
+    await ensureDatabase();
     const result = await pool.query(`
       SELECT
         id,
@@ -35,6 +37,19 @@ router.get('/blocked-times', async (_request, response) => {
       FROM appointments
       WHERE appointment_date >= CURRENT_DATE
         AND status <> 'cancelled'
+      UNION ALL
+      SELECT
+        id,
+        preferred_date AS "blockDate",
+        preferred_time_window AS "timeWindow",
+        'Confirmed intake request' AS reason,
+        'appointment' AS "source"
+      FROM contact_requests
+      WHERE request_type = 'intake'
+        AND preferred_date >= CURRENT_DATE
+        AND mrsms_confirmed_at IS NOT NULL
+        AND canceled_at IS NULL
+        AND auto_cancelled_at IS NULL
       ORDER BY "blockDate" ASC, "timeWindow" ASC
       LIMIT 120
     `);

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
-type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin' | 'cancel';
+type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin' | 'cancel' | 'confirm';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
@@ -22,16 +22,7 @@ const serviceItems = [
 const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
 const serviceAreaOptions = ['Ocean County', 'Central New Jersey', 'Camden County'];
 const publicServiceAreas = ['Ocean County', 'Camden County', 'Central New Jersey'];
-const serviceableCountyNames = new Set([
-  'ocean',
-  'camden',
-  'mercer',
-  'middlesex',
-  'monmouth',
-  'somerset',
-  'hunterdon',
-  'union',
-]);
+const serviceableZipPrefixes = ['077', '080', '081', '085', '086', '087', '088'];
 const timeWindowOptions = [
   '6 AM - 7 AM',
   '7 AM - 8 AM',
@@ -103,6 +94,10 @@ type CancellationDetails = {
   message?: string;
 };
 
+type AppointmentConfirmationDetails = CancellationDetails & {
+  confirmedAt?: string | null;
+};
+
 type DateParts = {
   year: string;
   month: string;
@@ -150,6 +145,7 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/contact')) return 'contact';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/cancel')) return 'cancel';
+  if (pathname.startsWith('/confirm')) return 'confirm';
   return 'home';
 }
 
@@ -624,9 +620,11 @@ function IntakePage() {
     dateOfBirth: '',
     phone: '',
     email: '',
-    addressLine1: '',
-    addressLine2: '',
-    county: '',
+    streetAddress: '',
+    addressDetails: '',
+    town: '',
+    state: 'NJ',
+    zipCode: '',
     preferredLab: '',
     requestedDate: '',
     preferredTimeWindow: '',
@@ -693,7 +691,7 @@ function IntakePage() {
       return;
     }
 
-    if (!isServiceableCounty(form.county)) {
+    if (!isServiceableZip(form.zipCode)) {
       setStatus('idle');
       setStatusMessage('');
       setShowServiceAreaNotice(true);
@@ -716,9 +714,11 @@ function IntakePage() {
       `Date of birth: ${form.dateOfBirth}`,
       `Phone: ${form.phone}`,
       `Email: ${form.email || 'Not provided'}`,
-      `Address line 1: ${form.addressLine1}`,
-      `Address line 2: ${form.addressLine2 || 'Not provided'}`,
-      `County: ${form.county}`,
+      `Street address: ${form.streetAddress}`,
+      `Address details: ${form.addressDetails || 'Not provided'}`,
+      `Town/city: ${form.town}`,
+      `State: ${form.state}`,
+      `ZIP code: ${form.zipCode}`,
       `Preferred lab: ${form.preferredLab || 'Not specified'}`,
       `Requested date: ${form.requestedDate || 'Not specified'}`,
       `Preferred time window: ${form.preferredTimeWindow || 'Not specified'}`,
@@ -739,6 +739,7 @@ function IntakePage() {
           email: form.email,
           message,
           requestType: 'intake',
+          zipCode: form.zipCode,
           preferredDate: form.requestedDate,
           preferredTimeWindow: form.preferredTimeWindow,
           hasKit: form.hasKit,
@@ -853,39 +854,55 @@ function IntakePage() {
               </label>
             </div>
 
-            <label>
-              Service address
-              <textarea
-                rows={3}
-                value={form.addressLine1}
-                onChange={(event) => setForm({ ...form, addressLine1: event.target.value })}
-                autoComplete="street-address"
-                required
-              />
-              <span className="field-help">Home, job, office, facility, or approved care setting.</span>
-            </label>
-
-            <label>
-              Address details
-              <textarea
-                rows={2}
-                value={form.addressLine2}
-                onChange={(event) => setForm({ ...form, addressLine2: event.target.value })}
-                placeholder="Gate number, apartment, entry instructions, parking notes, or floor."
-              />
-            </label>
-
             <div className="form-grid">
               <label>
-                County
+                Street address
                 <input
-                  value={form.county}
-                  onChange={(event) => setForm({ ...form, county: event.target.value })}
-                  placeholder="Ocean, Camden, Mercer, Middlesex, Monmouth, Somerset, Hunterdon, or Union"
+                  value={form.streetAddress}
+                  onChange={(event) => setForm({ ...form, streetAddress: event.target.value })}
+                  autoComplete="address-line1"
+                  required
+                />
+                <span className="field-help">Home, job, office, facility, or approved care setting.</span>
+              </label>
+              <label>
+                Address details
+                <input
+                  value={form.addressDetails}
+                  onChange={(event) => setForm({ ...form, addressDetails: event.target.value })}
+                  autoComplete="address-line2"
+                  placeholder="Apartment, gate number, floor, parking, or entry notes."
+                />
+              </label>
+              <label>
+                Town / city
+                <input
+                  value={form.town}
+                  onChange={(event) => setForm({ ...form, town: event.target.value })}
+                  autoComplete="address-level2"
+                  required
+                />
+              </label>
+              <label>
+                State
+                <input
+                  value={form.state}
+                  onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase().slice(0, 2) })}
+                  autoComplete="address-level1"
+                  required
+                />
+              </label>
+              <label>
+                ZIP code
+                <input
+                  value={form.zipCode}
+                  onChange={(event) => setForm({ ...form, zipCode: event.target.value.replace(/[^\d-]/g, '').slice(0, 10) })}
+                  autoComplete="postal-code"
+                  inputMode="numeric"
                   required
                 />
                 <span className="field-help">
-                  Regular service area: Ocean County, Camden County, and Central New Jersey counties.
+                  Regular service area: Ocean, Camden, and Central New Jersey.
                 </span>
               </label>
               <label>
@@ -1064,7 +1081,7 @@ function IntakePage() {
           <div className="confirmation-modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="service-area-title">
             <h2 id="service-area-title">Please call before scheduling.</h2>
             <p>
-              This address appears to be outside the regular M.R.S. Medical Services area. Please call
+              This ZIP code appears to be outside the regular M.R.S. Medical Services area. Please call
               <a href="tel:+19084637457"> (908) 463-7457</a> so the visit can be reviewed personally.
             </p>
             <button className="btn primary" type="button" onClick={() => setShowServiceAreaNotice(false)}>
@@ -1184,6 +1201,95 @@ function CancelPage() {
               </p>
             )}
           </form>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ConfirmAppointmentPage() {
+  const [details, setDetails] = useState<AppointmentConfirmationDetails | null>(null);
+  const [status, setStatus] = useState<'loading' | 'idle' | 'sending' | 'success' | 'error'>('loading');
+  const [statusMessage, setStatusMessage] = useState('Loading appointment details...');
+  const token = new URLSearchParams(window.location.search).get('token') || '';
+
+  useEffect(() => {
+    if (!token) {
+      setStatus('error');
+      setStatusMessage('This confirmation link is missing appointment details.');
+      return;
+    }
+
+    fetch(`/api/contact/confirm/${encodeURIComponent(token)}`)
+      .then(async (response) => {
+        const result = (await response.json().catch(() => ({}))) as AppointmentConfirmationDetails & { message?: string };
+        if (!response.ok) {
+          throw new Error(result.message || 'Appointment request could not be found.');
+        }
+        setDetails(result);
+        setStatus(result.confirmedAt ? 'success' : 'idle');
+        setStatusMessage(result.confirmedAt ? 'Appointment confirmed. Thank you.' : '');
+      })
+      .catch((error) => {
+        setStatus('error');
+        setStatusMessage(error instanceof Error ? error.message : 'Appointment request could not be found.');
+      });
+  }, [token]);
+
+  const handleConfirm = async () => {
+    setStatus('sending');
+    setStatusMessage('Confirming appointment...');
+
+    try {
+      const response = await fetch(`/api/contact/confirm/${encodeURIComponent(token)}`, {
+        method: 'POST',
+      });
+      const result = (await response.json().catch(() => ({}))) as AppointmentConfirmationDetails & { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Appointment could not be confirmed right now.');
+      }
+
+      setDetails(result);
+      setStatus('success');
+      setStatusMessage('Appointment confirmed. Thank you.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Appointment could not be confirmed right now.');
+    }
+  };
+
+  return (
+    <main>
+      <PageHero title="Confirm appointment.">
+        <p>Please confirm that you still plan to keep this appointment.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap cancel-layout">
+          <div className="contact-form cancel-panel">
+            <h2>Appointment details</h2>
+            {details && (
+              <div className="cancel-summary">
+                <p><strong>Name:</strong> {details.fullName}</p>
+                <p><strong>Date:</strong> {formatScheduleDate(details.preferredDate)}</p>
+                <p><strong>Time:</strong> {details.preferredTimeWindow}</p>
+                <p><strong>Phone:</strong> {details.phone}</p>
+              </div>
+            )}
+
+            {details && status !== 'success' && (
+              <button className="btn primary" type="button" onClick={() => void handleConfirm()} disabled={status === 'sending'}>
+                {status === 'sending' ? 'Confirming...' : 'Confirm Appointment'}
+              </button>
+            )}
+
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+          </div>
         </div>
       </section>
     </main>
@@ -1762,9 +1868,9 @@ function isAdultPatient(dateOfBirth: string) {
   return birthDate <= cutoff;
 }
 
-function isServiceableCounty(value: string) {
-  const normalized = value.toLowerCase().replace(/county/g, '').replace(/[^a-z]/g, '').trim();
-  return serviceableCountyNames.has(normalized);
+function isServiceableZip(value: string) {
+  const zip = value.replace(/\D/g, '').slice(0, 5);
+  return zip.length === 5 && serviceableZipPrefixes.some((prefix) => zip.startsWith(prefix));
 }
 
 function getLocalDateKey(value: Date) {
@@ -1809,8 +1915,8 @@ export default function App() {
 
   const navigate = (page: PageKey) => {
     const item = navItems.find((navItem) => navItem.key === page);
-    if (!item && page !== 'cancel') return;
-    const path = item?.path || '/cancel';
+    if (!item && page !== 'cancel' && page !== 'confirm') return;
+    const path = item?.path || (page === 'confirm' ? '/confirm' : '/cancel');
     window.history.pushState(null, '', path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setActivePage(page);
@@ -1826,6 +1932,7 @@ export default function App() {
       {activePage === 'contact' && <ContactPage />}
       {activePage === 'admin' && <AdminPage />}
       {activePage === 'cancel' && <CancelPage />}
+      {activePage === 'confirm' && <ConfirmAppointmentPage />}
       <Footer onNavigate={navigate} />
     </div>
   );
