@@ -16,13 +16,29 @@ const clientDist = path.resolve(__dirname, '../../client/dist');
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true }));
 app.use(express.json({ limit: '100kb' }));
+app.use((request, response, next) => {
+  request.setTimeout(25000);
+  response.setTimeout(25000, () => {
+    if (!response.headersSent) {
+      response.status(504).json({ message: 'Request timed out. Please try again.' });
+    }
+  });
+  next();
+});
 app.use('/api/health', healthRouter);
 app.use('/api/contact', contactRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/availability', availabilityRouter);
-app.use(express.static(clientDist));
+app.use(express.static(clientDist, {
+  setHeaders: (response, filePath) => {
+    if (filePath.endsWith('index.html')) {
+      response.setHeader('Cache-Control', 'no-store');
+    }
+  },
+}));
 
 app.get('*', (_request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
   response.sendFile(path.join(clientDist, 'index.html'));
 });
 
