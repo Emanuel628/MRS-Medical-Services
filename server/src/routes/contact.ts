@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express';
 import { Resend } from 'resend';
+import { calculateVisitPrice } from '../config/pricing.js';
 import { pool } from '../config/database.js';
 
 const router = Router();
@@ -23,6 +24,11 @@ type ContactRequest = {
   preferredLab?: string;
   prescriptionReady?: boolean;
   notes?: string;
+  oneWayTravelMinutes?: number;
+  isStatOrRush?: boolean;
+  isWeekendOrHoliday?: boolean;
+  patientCount?: number;
+  additionalPatientFeeCents?: number;
 };
 
 type SavedContactRequest = {
@@ -61,6 +67,15 @@ let remindersStarted = false;
 
 function cleanField(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function cleanOptionalNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function hasDatabaseUrl() {
@@ -114,6 +129,8 @@ export async function ensureDatabase() {
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS auto_cancelled_at TIMESTAMPTZ');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS cancellation_reason TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS quoted_price_cents INTEGER');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS pricing_quote JSONB');
   await pool.query('UPDATE contact_requests SET cancel_token = gen_random_uuid() WHERE cancel_token IS NULL');
   await pool.query('UPDATE contact_requests SET patient_confirm_token = gen_random_uuid() WHERE patient_confirm_token IS NULL');
   await pool.query('UPDATE contact_requests SET mrsms_decision_token = gen_random_uuid() WHERE mrsms_decision_token IS NULL');
@@ -422,6 +439,23 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
   const zipCode = cleanField(body.zipCode) || null;
   const preferredDate = cleanField(body.preferredDate) || null;
   const preferredTimeWindow = cleanField(body.preferredTimeWindow) || null;
+  const oneWayTravelMinutes = cleanOptionalNumber(body.oneWayTravelMinutes);
+  const hasPricingInputs = oneWayTravelMinutes !== undefined ||
+    body.isStatOrRush === true ||
+    body.isWeekendOrHoliday === true ||
+    cleanOptionalNumber(body.patientCount) !== undefined ||
+    cleanOptionalNumber(body.additionalPatientFeeCents) !== undefined;
+  const priceQuote = hasPricingInputs
+    ? calculateVisitPrice({
+        oneWayTravelMinutes,
+        appointmentDate: preferredDate,
+        timeWindow: preferredTimeWindow,
+        isStatOrRush: body.isStatOrRush === true,
+        isWeekendOrHoliday: body.isWeekendOrHoliday === true,
+        patientCount: cleanOptionalNumber(body.patientCount),
+        additionalPatientFeeCents: cleanOptionalNumber(body.additionalPatientFeeCents),
+      })
+    : null;
 
   const result = await pool.query<SavedContactRequest>(
     `INSERT INTO contact_requests (
@@ -433,15 +467,29 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
       request_type,
       service_area,
       preferred_date,
-      preferred_time_window
+      preferred_time_window,
+      quoted_price_cents,
+      pricing_quote
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING
       id,
       cancel_token AS "cancelToken",
       patient_confirm_token AS "patientConfirmToken",
       mrsms_decision_token AS "mrsmsDecisionToken"`,
-    [name, email || null, phone, zipCode, message || null, requestType, serviceArea, preferredDate, preferredTimeWindow],
+    [
+      name,
+      email || null,
+      phone,
+      zipCode,
+      message || null,
+      requestType,
+      serviceArea,
+      preferredDate,
+      preferredTimeWindow,
+      priceQuote?.totalCents ?? null,
+      priceQuote ? JSON.stringify(priceQuote) : null,
+    ],
   );
 
   return result.rows[0] ?? null;

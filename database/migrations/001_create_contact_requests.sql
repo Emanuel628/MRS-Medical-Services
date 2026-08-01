@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS contact_requests (
   auto_cancelled_at TIMESTAMPTZ,
   canceled_at TIMESTAMPTZ,
   cancellation_reason TEXT,
+  quoted_price_cents INTEGER,
+  pricing_quote JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -133,6 +133,40 @@ async function ensureAuthTables() {
   await pool.query('CREATE INDEX IF NOT EXISTS admin_registration_status_idx ON admin_registration_requests (status)');
 }
 
+async function createAdminSession(userId: string) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + sessionMinutes * 60 * 1000);
+  await pool.query('INSERT INTO admin_sessions (token, user_id, expires_at) VALUES ($1, $2, $3)', [
+    token,
+    userId,
+    expiresAt,
+  ]);
+  return { token, expiresAt };
+}
+
+async function approveBootstrapAdmin(email: string, password: string) {
+  const result = await pool.query<{ id: string }>(
+    `INSERT INTO admin_users (email, password_hash, status, approved_at)
+     VALUES ($1, $2, 'approved', NOW())
+     ON CONFLICT (email) DO UPDATE
+     SET password_hash = EXCLUDED.password_hash,
+       status = 'approved',
+       approved_at = COALESCE(admin_users.approved_at, NOW())
+     RETURNING id`,
+    [email, hashPassword(password)],
+  );
+
+  await pool.query(
+    `UPDATE admin_registration_requests
+     SET status = 'approved',
+       decided_at = COALESCE(decided_at, NOW())
+     WHERE email = $1 AND status = 'pending'`,
+    [email],
+  );
+
+  return result.rows[0]?.id || '';
+}
+
 async function sendAdminRegistrationEmail(request: { protocol: string; get(name: string): string | undefined }, email: string, token: string) {
   if (!resend) return;
 
@@ -291,6 +325,11 @@ router.post('/auth/login', async (request, response) => {
 
   const email = cleanEmail(request.body?.email);
   const password = cleanField(request.body?.password);
+  if (!isValidEmail(email) || !password) {
+    response.status(400).json({ message: 'Enter a valid email and password.' });
+    return;
+  }
+
   const key = `${request.ip || 'unknown'}:${email}`;
   if (!checkRateLimit(loginAttempts, key, 5)) {
     response.status(429).json({ message: 'Too many login attempts. Try again later.' });
@@ -305,18 +344,21 @@ router.post('/auth/login', async (request, response) => {
     );
     const row = user.rows[0];
     if (!row || row.status !== 'approved' || !verifyPassword(password, row.passwordHash)) {
+      if (isAuthorized(password)) {
+        const userId = await approveBootstrapAdmin(email, password);
+        if (userId) {
+          const session = await createAdminSession(userId);
+          response.json({ message: 'Signed in.', token: session.token, expiresAt: session.expiresAt.toISOString() });
+          return;
+        }
+      }
+
       response.status(401).json({ message: 'Email or password is incorrect, or the account is not approved yet.' });
       return;
     }
 
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + sessionMinutes * 60 * 1000);
-    await pool.query('INSERT INTO admin_sessions (token, user_id, expires_at) VALUES ($1, $2, $3)', [
-      token,
-      row.id,
-      expiresAt,
-    ]);
-    response.json({ message: 'Signed in.', token, expiresAt: expiresAt.toISOString() });
+    const session = await createAdminSession(row.id);
+    response.json({ message: 'Signed in.', token: session.token, expiresAt: session.expiresAt.toISOString() });
   } catch (error) {
     console.error('Admin login failed', error);
     response.status(500).json({ message: 'Login failed right now.' });
