@@ -18,6 +18,8 @@ const serviceItems = [
   'Assisted living or facility visits',
 ];
 
+const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
+
 const steps = [
   ['1', 'Request a visit', 'Share the basic details and location so the visit can be reviewed.'],
   ['2', 'Confirm the order', 'Have the required lab order, kit, or collection instructions ready.'],
@@ -125,12 +127,12 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <p>Service is planned around an approved home, office, or facility visit.</p>
           </article>
           <article>
-            <strong>Focused</strong>
-            <p>The site stays centered on mobile collection, not unrelated medical claims.</p>
+            <strong>Clear pricing</strong>
+            <p>Normal blood draws are $80, with additional kit or provider-order fees when needed.</p>
           </article>
           <article>
             <strong>Simple</strong>
-            <p>Clear next steps help visitors understand what is needed before scheduling.</p>
+            <p>All you need to start is a prescription, lab order, or collection kit instructions.</p>
           </article>
         </div>
       </section>
@@ -196,6 +198,47 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       </section>
 
       <section className="section muted">
+        <div className="wrap info-grid">
+          <article>
+            <span className="eyebrow">Pricing</span>
+            <h2>Simple visit fees.</h2>
+            <p>
+              Normal blood draws are $80. Additional kits or orders from a different doctor or
+              provider are $20 each.
+            </p>
+            <p>
+              The mobile collection fee is separate from any laboratory testing charges, insurance
+              billing, or provider fees.
+            </p>
+          </article>
+          <article>
+            <span className="eyebrow">Requirements</span>
+            <h2>Prescription required.</h2>
+            <p>
+              A prescription, lab order, or collection kit instructions are required before a blood
+              draw can be completed.
+            </p>
+            <p>Appointments require 24-hour notice for cancellation.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="wrap services-layout">
+          <div className="section-title">
+            <span>Labs and kits</span>
+            <h2>Collection support for common lab orders.</h2>
+            <i />
+          </div>
+          <ul className="service-list">
+            {labOptions.map((lab) => (
+              <li key={lab}>{lab}</li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className="section muted">
         <div className="wrap content-block">
           <h2>Before requesting a visit</h2>
           <p>
@@ -232,8 +275,8 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
               the specimen.
             </p>
             <p>
-              Verified credentials, service area details, hours, and policies can be added as soon
-              as the business is ready to publish them.
+              Service hours are Monday through Friday, 6 AM to 2 PM. Appointments require 24-hour
+              notice for cancellation.
             </p>
           </div>
           <div className="about-note">
@@ -356,6 +399,9 @@ function ContactPage() {
             <h2>Contact details</h2>
             <p><strong>Phone:</strong> <a href="tel:+19084637457">(908) 463-7457</a></p>
             <p><strong>Email:</strong> <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a></p>
+            <p><strong>Hours:</strong> Monday-Friday, 6 AM-2 PM</p>
+            <p><strong>Pricing:</strong> Normal draws are $80. Additional kits or different provider orders are $20 each.</p>
+            <p><strong>Cancellation:</strong> Please provide 24-hour notice.</p>
             <p>
               Do not include sensitive medical information in the first message. Basic scheduling
               details are enough to start the conversation.

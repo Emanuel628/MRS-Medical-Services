@@ -319,6 +319,28 @@ a {
   max-width: 720px;
 }
 
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 42px;
+}
+
+.info-grid article {
+  max-width: 560px;
+}
+
+.info-grid h2 {
+  margin: 10px 0 14px;
+  color: var(--navy-deep);
+  font: 700 32px / 1.08 Georgia, 'Times New Roman', serif;
+}
+
+.info-grid p {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.58;
+}
+
 .content-block .btn {
   margin-top: 12px;
 }
@@ -475,7 +497,8 @@ a {
   }
 
   .steps,
-  .service-list {
+  .service-list,
+  .info-grid {
     grid-template-columns: 1fr;
   }
 
