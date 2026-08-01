@@ -357,6 +357,11 @@ a {
   max-width: 720px;
 }
 
+.about-notes {
+  display: grid;
+  gap: 18px;
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -477,6 +482,33 @@ a {
 .about-note strong {
   color: var(--navy-deep);
   font-size: 18px;
+}
+
+.about-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.about-list li {
+  position: relative;
+  padding-left: 22px;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.about-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: .45em;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--teal);
 }
 
 .contact-form {

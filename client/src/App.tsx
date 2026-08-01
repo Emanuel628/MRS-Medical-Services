@@ -382,30 +382,46 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
     <main>
       <PageHero title="Personal, professional mobile collection.">
         <p>
-          M.R.S. Medical Services helps patients complete blood work without adding a waiting-room
-          visit to their day.
+          M.R.S. Medical Services brings experienced, certified phlebotomy care to patients who
+          need blood work completed outside of a traditional lab setting.
         </p>
       </PageHero>
 
       <section className="section">
         <div className="wrap about-layout">
           <div className="content-block">
-            <h2>Focused, one-on-one care</h2>
+            <h2>Experienced care in real-world settings.</h2>
             <p>
-              M.R.S. keeps the experience personal and direct. The goal is to make blood work feel
-              less disruptive for patients, families, and care teams.
+              M.R.S. is led by an NCCT-certified phlebotomy professional with 18 years of hands-on
+              experience. That background includes work in rehabilitation facilities, correctional
+              health settings, mental health care, nursing homes, and doctors' offices.
             </p>
             <p>
-              Visits are handled with attention to comfort, professionalism, and clear
-              communication from the first message through the collection.
+              That range of experience matters during mobile visits. Patients may be at home,
+              recovering, managing anxiety, coordinating care for a loved one, or working around a
+              provider's order. The goal is to keep the visit calm, prepared, and respectful from
+              the first message through the collection.
             </p>
           </div>
-          <div className="about-note">
-            <strong>What to expect</strong>
-            <p>
-              You will be asked for basic visit details first. Medical questions, diagnosis, and
-              lab-result interpretation should always stay with your provider.
-            </p>
+          <div className="about-notes">
+            <div className="about-note">
+              <strong>Background includes</strong>
+              <ul className="about-list">
+                <li>18 years of phlebotomy experience</li>
+                <li>NCCT certification</li>
+                <li>Rehabilitation facilities</li>
+                <li>Correctional health settings</li>
+                <li>Mental health care settings</li>
+                <li>Nursing homes and doctors' offices</li>
+              </ul>
+            </div>
+            <div className="about-note">
+              <strong>Scope of care</strong>
+              <p>
+                You will be asked for basic visit details first. Medical questions, diagnosis, and
+                lab-result interpretation should always stay with your provider.
+              </p>
+            </div>
           </div>
         </div>
       </section>
