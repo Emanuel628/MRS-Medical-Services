@@ -807,12 +807,14 @@ a {
 
 .checkout-total {
   display: grid;
-  align-content: center;
+  align-content: start;
+  justify-items: start;
   gap: 5px;
   min-height: 86px;
-  padding: 14px;
+  padding: 18px 14px 14px;
   border: 1px solid var(--border);
   background: var(--white);
+  text-align: left;
 }
 
 .checkout-total span {

@@ -403,7 +403,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       <section className="section reviews-section">
         <div className="wrap reviews-layout">
           <div className="section-title">
-            <span>Trust</span>
+            <span>Professional care you can trust</span>
             <h2>Care that feels personal and prepared.</h2>
             <i />
             <ul className="trust-list">
@@ -1319,7 +1319,7 @@ function IntakePage() {
                 </div>
                 {form.paymentMethod === 'card' && (
                   <div className="checkout-total" aria-live="polite">
-                    <span>Estimated visit total</span>
+                    <span>Checkout total</span>
                     <strong>{formatCurrency(cardTotal)}</strong>
                     <small>Based on the service ZIP code and selected visit details.</small>
                   </div>
