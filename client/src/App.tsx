@@ -21,6 +21,17 @@ const serviceItems = [
 
 const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
 const serviceAreaOptions = ['Ocean County', 'Central New Jersey', 'Camden County'];
+const publicServiceAreas = ['Ocean County', 'Camden County', 'Central New Jersey'];
+const serviceableCountyNames = new Set([
+  'ocean',
+  'camden',
+  'mercer',
+  'middlesex',
+  'monmouth',
+  'somerset',
+  'hunterdon',
+  'union',
+]);
 const timeWindowOptions = [
   '6 AM - 7 AM',
   '7 AM - 8 AM',
@@ -197,6 +208,9 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
               </button>
               <a className="btn secondary" href="tel:+19084637457">Call Now</a>
             </div>
+            <p className="service-area-line">
+              Serving {publicServiceAreas.join(', ')}.
+            </p>
           </div>
           <div className="hero-media" aria-label="Mobile phlebotomy visit in a patient's home">
             <img src="/images/mobile-phlebotomy-hero.png" alt="" />
@@ -410,17 +424,32 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       <section className="section">
         <div className="wrap about-layout">
           <div className="content-block">
-            <h2>Experienced care in real-world settings.</h2>
+            <h2>About Dennise Irving.</h2>
             <p>
-              M.R.S. is led by an NCCT-certified phlebotomy professional with 18 years of hands-on
-              experience. That background includes work in rehabilitation facilities, correctional
-              health settings, mental health care, nursing homes, and doctors' offices.
+              My name is Dennise Irving, founder of M.R.S. Medical Services. I am a dedicated and
+              compassionate phlebotomist committed to safe, reliable, and professional mobile
+              specimen collection.
             </p>
             <p>
-              That range of experience matters during mobile visits. Patients may be at home,
-              recovering, managing anxiety, coordinating care for a loved one, or working around a
-              provider's order. The goal is to keep the visit calm, prepared, and respectful from
-              the first message through the collection.
+              My mission is to make laboratory testing more convenient by bringing high-quality
+              phlebotomy services directly to patients in their homes, workplaces, assisted living
+              facilities, and other healthcare settings.
+            </p>
+            <p>
+              I understand that having blood drawn can be stressful, especially for children, older
+              adults, and individuals with medical conditions. I take pride in creating a calm,
+              respectful, and comfortable experience while maintaining high standards for patient
+              care, safety, and confidentiality.
+            </p>
+            <p>
+              M.R.S. Medical Services is built on integrity, professionalism, and attention to
+              detail. Every specimen is collected with precision and handled according to
+              established laboratory protocols, so patients and providers can depend on careful,
+              respectful service.
+            </p>
+            <p>
+              Thank you for trusting M.R.S. Medical Services. I look forward to serving you with
+              professionalism, compassion, and excellence.
             </p>
           </div>
           <div className="about-notes">
@@ -576,6 +605,7 @@ function IntakePage() {
     email: '',
     addressLine1: '',
     addressLine2: '',
+    county: '',
     preferredLab: '',
     requestedDate: '',
     preferredTimeWindow: '',
@@ -586,6 +616,7 @@ function IntakePage() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showServiceAreaNotice, setShowServiceAreaNotice] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const rollingDates = getRollingVisitDates(new Date(), 30);
   const selectedBlockedWindows = new Set(
@@ -630,6 +661,13 @@ function IntakePage() {
       return;
     }
 
+    if (!isServiceableCounty(form.county)) {
+      setStatus('idle');
+      setStatusMessage('');
+      setShowServiceAreaNotice(true);
+      return;
+    }
+
     if (form.preferredTimeWindow && selectedUnavailableWindows.has(form.preferredTimeWindow)) {
       setStatus('error');
       setStatusMessage('That time window is unavailable. Please choose another option.');
@@ -648,6 +686,7 @@ function IntakePage() {
       `Email: ${form.email || 'Not provided'}`,
       `Address line 1: ${form.addressLine1}`,
       `Address line 2: ${form.addressLine2 || 'Not provided'}`,
+      `County: ${form.county}`,
       `Preferred lab: ${form.preferredLab || 'Not specified'}`,
       `Requested date: ${form.requestedDate || 'Not specified'}`,
       `Preferred time window: ${form.preferredTimeWindow || 'Not specified'}`,
@@ -691,12 +730,18 @@ function IntakePage() {
 
   return (
     <main>
-      <PageHero title="Patient intake form.">
-        <p>
-          Send the details for the visit. M.R.S. will review the route, timing, and paperwork before
-          confirming an appointment.
-        </p>
-      </PageHero>
+      <section className="page-hero intake-hero">
+        <div className="wrap intake-hero-inner">
+          <div>
+            <h1>Patient intake form.</h1>
+            <p>
+              Send the details for the visit. M.R.S. will review the route, timing, and paperwork before
+              confirming an appointment.
+            </p>
+          </div>
+          <img src="/images/intake-consultation.png" alt="Mobile phlebotomy intake review" />
+        </div>
+      </section>
 
       <section className="section">
         <div className="wrap intake-layout">
@@ -771,6 +816,18 @@ function IntakePage() {
 
             <div className="form-grid">
               <label>
+                County
+                <input
+                  value={form.county}
+                  onChange={(event) => setForm({ ...form, county: event.target.value })}
+                  placeholder="Ocean, Camden, Mercer, Middlesex, Monmouth, Somerset, Hunterdon, or Union"
+                  required
+                />
+                <span className="field-help">
+                  Regular service area: Ocean County, Camden County, and Central New Jersey counties.
+                </span>
+              </label>
+              <label>
                 Preferred lab
                 <select
                   value={form.preferredLab}
@@ -783,6 +840,25 @@ function IntakePage() {
                   ))}
                   <option value="Other">Other / not sure</option>
                 </select>
+              </label>
+            </div>
+
+            <div className="checkbox-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.prescriptionReady}
+                  onChange={(event) => setForm({ ...form, prescriptionReady: event.target.checked })}
+                />
+                I have a prescription, lab order, or provider instructions.
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.hasKit}
+                  onChange={(event) => setForm({ ...form, hasKit: event.target.checked })}
+                />
+                I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
               </label>
             </div>
 
@@ -854,25 +930,6 @@ function IntakePage() {
               </div>
             </div>
 
-            <div className="checkbox-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={form.prescriptionReady}
-                  onChange={(event) => setForm({ ...form, prescriptionReady: event.target.checked })}
-                />
-                I have a prescription, lab order, or provider instructions.
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={form.hasKit}
-                  onChange={(event) => setForm({ ...form, hasKit: event.target.checked })}
-                />
-                I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
-              </label>
-            </div>
-
             <label>
               Notes
               <textarea
@@ -897,7 +954,7 @@ function IntakePage() {
 
       {showConfirmation && (
         <div className="modal-backdrop" role="presentation">
-          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+          <div className="confirmation-modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
             <h2 id="confirmation-title">Thank you, {form.fullName}</h2>
             <p>
               Your visit request for {formatScheduleDate(form.requestedDate)} during {form.preferredTimeWindow} was
@@ -906,6 +963,21 @@ function IntakePage() {
             <p>Appointments must be canceled at least 24 hours in advance.</p>
             <p>A confirmation email has been sent to {form.email}.</p>
             <button className="btn primary" type="button" onClick={() => setShowConfirmation(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showServiceAreaNotice && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="confirmation-modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="service-area-title">
+            <h2 id="service-area-title">Please call before scheduling.</h2>
+            <p>
+              This address appears to be outside the regular M.R.S. Medical Services area. Please call
+              <a href="tel:+19084637457"> (908) 463-7457</a> so the visit can be reviewed personally.
+            </p>
+            <button className="btn primary" type="button" onClick={() => setShowServiceAreaNotice(false)}>
               Close
             </button>
           </div>
@@ -1552,6 +1624,11 @@ function isAdultPatient(dateOfBirth: string) {
   const cutoff = new Date();
   cutoff.setFullYear(cutoff.getFullYear() - 19);
   return birthDate <= cutoff;
+}
+
+function isServiceableCounty(value: string) {
+  const normalized = value.toLowerCase().replace(/county/g, '').replace(/[^a-z]/g, '').trim();
+  return serviceableCountyNames.has(normalized);
 }
 
 function getLocalDateKey(value: Date) {
