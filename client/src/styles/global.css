@@ -707,6 +707,28 @@ a {
   background: #fff8f8;
 }
 
+.terms-panel {
+  justify-items: start;
+}
+
+.terms-completion {
+  width: min(100%, 760px);
+  display: grid;
+  gap: 20px;
+  justify-items: start;
+}
+
+.terms-completion .terms-acknowledgement {
+  width: 100%;
+  padding: 18px 20px;
+}
+
+.terms-completion > .btn {
+  width: auto;
+  min-width: 280px;
+  justify-self: start;
+}
+
 .checkbox-group {
   display: grid;
   gap: 12px;
@@ -1646,6 +1668,17 @@ a {
   .dashboard-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .terms-completion {
+    width: 100%;
+  }
+
+  .terms-completion > .btn {
+    width: 100%;
+    min-width: 0;
   }
 }
 

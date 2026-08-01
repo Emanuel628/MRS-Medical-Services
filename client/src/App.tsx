@@ -1522,30 +1522,33 @@ function IntakePage() {
                 )}
               </section>
 
-              <section className="intake-panel full-span" aria-labelledby="terms-title">
+              <section className="intake-panel full-span terms-panel" aria-labelledby="terms-title">
                 <h2 id="terms-title">Terms</h2>
-                <label className={`checkbox-field terms-acknowledgement ${missingTerms ? 'field-invalid' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={form.termsAccepted}
-                    onChange={(event) => setForm({ ...form, termsAccepted: event.target.checked })}
-                    required
-                  />
-                  <span>
-                    I agree to the <a href="/terms">Terms &amp; Conditions</a> and{' '}
-                    <a href="/privacy">Privacy Policy</a>, and authorize M.R.S. Medical Services to use my submitted
-                    information to process this visit request and payment.
-                  </span>
-                </label>
 
-                <button className="btn primary" type="submit" disabled={status === 'sending'}>
-                  {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Appointment'}
-                </button>
-                {statusMessage && (
-                  <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
-                    {statusMessage}
-                  </p>
-                )}
+                <div className="terms-completion">
+                  <label className={`checkbox-field terms-acknowledgement ${missingTerms ? 'field-invalid' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={form.termsAccepted}
+                      onChange={(event) => setForm({ ...form, termsAccepted: event.target.checked })}
+                      required
+                    />
+                    <span>
+                      I agree to the <a href="/terms">Terms &amp; Conditions</a> and{' '}
+                      <a href="/privacy">Privacy Policy</a>, and authorize M.R.S. Medical Services to use my submitted
+                      information to process this visit request and payment.
+                    </span>
+                  </label>
+
+                  <button className="btn primary" type="submit" disabled={status === 'sending'}>
+                    {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Appointment'}
+                  </button>
+                  {statusMessage && (
+                    <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                      {statusMessage}
+                    </p>
+                  )}
+                </div>
               </section>
             </div>
           </form>
