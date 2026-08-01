@@ -87,6 +87,10 @@ function cleanRequestType(value: string) {
   return value === 'intake' || value === 'manual_intake' ? value : 'contact';
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function getSiteOrigin(request: Request) {
   const configuredOrigin = cleanField(process.env.CLIENT_ORIGIN);
   if (configuredOrigin) return configuredOrigin.replace(/\/$/, '');
@@ -282,8 +286,8 @@ router.post('/', async (request, response) => {
 
 router.get('/cancel/:token', async (request, response) => {
   const token = cleanField(request.params.token);
-  if (!token) {
-    response.status(400).json({ message: 'Cancellation link is missing appointment details.' });
+  if (!token || !isUuid(token)) {
+    response.status(404).json({ message: 'Appointment request could not be found.' });
     return;
   }
 
@@ -325,8 +329,8 @@ router.post('/cancel/:token', async (request, response) => {
   const token = cleanField(request.params.token);
   const reason = cleanField(request.body?.reason);
 
-  if (!token) {
-    response.status(400).json({ message: 'Cancellation link is missing appointment details.' });
+  if (!token || !isUuid(token)) {
+    response.status(404).json({ message: 'Appointment request could not be found.' });
     return;
   }
 
