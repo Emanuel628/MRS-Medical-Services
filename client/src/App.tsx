@@ -22,6 +22,7 @@ const serviceItems = [
 const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Heart', 'SpectraCell'];
 const serviceAreaOptions = ['Ocean County', 'Central New Jersey', 'Camden County'];
 const timeWindowOptions = ['6 AM - 8 AM', '8 AM - 10 AM', '10 AM - 12 PM', '12 PM - 2 PM'];
+const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 type AdminRequest = {
   id: string;
@@ -54,6 +55,7 @@ type BlockedTime = {
   blockDate: string;
   timeWindow: string;
   reason: string | null;
+  source?: 'blocked' | 'appointment';
 };
 
 const steps = [
@@ -459,11 +461,21 @@ function IntakePage() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
+  const todayKey = getLocalDateKey(new Date());
+  const calendarDays = getCalendarDays(visibleMonth);
   const selectedBlockedWindows = new Set(
     blockedTimes
       .filter((blocked) => getScheduleDateKey(blocked.blockDate) === form.requestedDate)
       .map((blocked) => blocked.timeWindow),
   );
+  const unavailableByDate = blockedTimes.reduce<Record<string, Set<string>>>((availability, blocked) => {
+    const key = getScheduleDateKey(blocked.blockDate);
+    availability[key] = availability[key] || new Set<string>();
+    availability[key].add(blocked.timeWindow);
+    return availability;
+  }, {});
+  const selectedDateLabel = form.requestedDate ? formatScheduleDate(form.requestedDate) : 'Choose a date';
 
   useEffect(() => {
     fetch('/api/availability/blocked-times')
@@ -474,6 +486,12 @@ function IntakePage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!form.requestedDate || !form.preferredTimeWindow) {
+      setStatus('error');
+      setStatusMessage('Please choose an available date and time window.');
+      return;
+    }
 
     if (form.preferredTimeWindow && selectedBlockedWindows.has(form.preferredTimeWindow)) {
       setStatus('error');
@@ -622,40 +640,95 @@ function IntakePage() {
                   <option value="Other">Other / not sure</option>
                 </select>
               </label>
-              <label>
-                Preferred visit date
-                <input
-                  type="date"
-                  value={form.requestedDate}
-                  onChange={(event) => {
-                    const nextDate = event.target.value;
-                    const blockedForDate = blockedTimes
-                      .filter((blocked) => getScheduleDateKey(blocked.blockDate) === nextDate)
-                      .map((blocked) => blocked.timeWindow);
-                    setForm({
-                      ...form,
-                      requestedDate: nextDate,
-                      preferredTimeWindow: blockedForDate.includes(form.preferredTimeWindow)
-                        ? ''
-                        : form.preferredTimeWindow,
-                    });
-                  }}
-                />
-              </label>
-              <label>
-                Preferred time window
-                <select
-                  value={form.preferredTimeWindow}
-                  onChange={(event) => setForm({ ...form, preferredTimeWindow: event.target.value })}
+            </div>
+
+            <div className="booking-calendar" aria-label="Visit availability calendar">
+              <div className="calendar-header">
+                <button
+                  className="calendar-nav"
+                  type="button"
+                  onClick={() => setVisibleMonth(addMonths(visibleMonth, -1))}
+                  disabled={getMonthKey(visibleMonth) <= getMonthKey(startOfMonth(new Date()))}
+                  aria-label="Previous month"
                 >
-                  <option value="">Select if known</option>
-                  {timeWindowOptions.map((window) => (
-                    <option key={window} value={window} disabled={selectedBlockedWindows.has(window)}>
-                      {selectedBlockedWindows.has(window) ? `${window} - unavailable` : window}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  ‹
+                </button>
+                <div>
+                  <strong>{visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</strong>
+                  <span>{selectedDateLabel}</span>
+                </div>
+                <button
+                  className="calendar-nav"
+                  type="button"
+                  onClick={() => setVisibleMonth(addMonths(visibleMonth, 1))}
+                  aria-label="Next month"
+                >
+                  ›
+                </button>
+              </div>
+
+              <div className="calendar-weekdays" aria-hidden="true">
+                {weekdayLabels.map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+
+              <div className="calendar-grid">
+                {calendarDays.map((date) => {
+                  const dateKey = getLocalDateKey(date);
+                  const blockedForDate = unavailableByDate[dateKey] || new Set<string>();
+                  const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
+                  const isPast = dateKey < todayKey;
+                  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                  const isFull = timeWindowOptions.every((window) => blockedForDate.has(window));
+                  const isDisabled = !isCurrentMonth || isPast || isWeekend || isFull;
+
+                  return (
+                    <button
+                      key={dateKey}
+                      className={`calendar-day ${form.requestedDate === dateKey ? 'selected' : ''}`}
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() => {
+                        setForm({
+                          ...form,
+                          requestedDate: dateKey,
+                          preferredTimeWindow: blockedForDate.has(form.preferredTimeWindow)
+                            ? ''
+                            : form.preferredTimeWindow,
+                        });
+                      }}
+                    >
+                      <span>{date.getDate()}</span>
+                      {isCurrentMonth && !isPast && !isWeekend && (
+                        <small>{isFull ? 'Full' : `${timeWindowOptions.length - blockedForDate.size} open`}</small>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="time-slot-panel">
+                <strong>{form.requestedDate ? 'Available time windows' : 'Choose a date to see times'}</strong>
+                <div className="time-slot-grid">
+                  {timeWindowOptions.map((window) => {
+                    const isUnavailable = selectedBlockedWindows.has(window);
+
+                    return (
+                      <button
+                        key={window}
+                        className={`time-slot ${form.preferredTimeWindow === window ? 'selected' : ''}`}
+                        type="button"
+                        disabled={!form.requestedDate || isUnavailable}
+                        onClick={() => setForm({ ...form, preferredTimeWindow: window })}
+                      >
+                        <span>{window}</span>
+                        <small>{isUnavailable ? 'Unavailable' : 'Available'}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="checkbox-group">
@@ -1197,6 +1270,37 @@ function formatScheduleDate(value: string) {
   const date = year && month && day ? new Date(year, month - 1, day) : new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getCalendarDays(monthDate: Date) {
+  const firstDay = startOfMonth(monthDate);
+  const firstGridDay = new Date(firstDay);
+  firstGridDay.setDate(firstGridDay.getDate() - firstGridDay.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(firstGridDay);
+    date.setDate(firstGridDay.getDate() + index);
+    return date;
+  });
+}
+
+function startOfMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), 1);
+}
+
+function addMonths(value: Date, amount: number) {
+  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
+}
+
+function getMonthKey(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getLocalDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function getScheduleDateKey(value: string) {
