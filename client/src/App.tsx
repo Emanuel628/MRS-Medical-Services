@@ -179,33 +179,6 @@ function getPasswordStrengthLabel(score: number) {
   return 'Strong';
 }
 
-function estimateOneWayTravelMinutes(zipCode: string) {
-  const prefix = zipCode.trim().slice(0, 3);
-  const pricingOrigin = { lat: 39.60, lng: -74.35 };
-  const zipCentroids: Record<string, { lat: number; lng: number }> = {
-    '08087': { lat: 39.60, lng: -74.35 },
-    '077': { lat: 40.35, lng: -74.08 },
-    '080': { lat: 39.82, lng: -74.87 },
-    '081': { lat: 39.94, lng: -75.10 },
-    '085': { lat: 40.28, lng: -74.60 },
-    '086': { lat: 40.22, lng: -74.76 },
-    '087': { lat: 39.92, lng: -74.20 },
-    '088': { lat: 40.55, lng: -74.45 },
-  };
-  const destination = zipCentroids[zipCode.trim().slice(0, 5)] || zipCentroids[prefix];
-  if (!destination) return null;
-
-  const radians = Math.PI / 180;
-  const lat1 = pricingOrigin.lat * radians;
-  const lat2 = destination.lat * radians;
-  const deltaLat = (destination.lat - pricingOrigin.lat) * radians;
-  const deltaLng = (destination.lng - pricingOrigin.lng) * radians;
-  const a = Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
-  const miles = 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.ceil(miles * 1.55 + 8);
-}
-
 function calculateIntakeTotal(requestedDate: string, timeWindow: string, patientCount: number, kitCount: number) {
   const date = requestedDate ? new Date(`${requestedDate}T12:00:00`) : null;
   const day = date && !Number.isNaN(date.getTime()) ? date.getDay() : null;
@@ -1421,7 +1394,7 @@ function IntakePage() {
                     </label>
                     {form.isGroup && (
                       <>
-                        <label>
+                        <label className="count-field">
                           Number of people
                           <input
                             type="number"
@@ -1479,7 +1452,7 @@ function IntakePage() {
                 </div>
 
                 {form.hasKit && (
-                  <label>
+                  <label className="count-field">
                     Number of specialty kits
                     <input
                       type="number"
@@ -2026,9 +1999,8 @@ function TermsPage() {
           </p>
           <p>
             Pricing shown during scheduling is an estimated visit total calculated from submitted appointment
-            details, including service ZIP code, requested time, date, and group size when applicable. Group
-            appointments may be scheduled by one contact person; additional group member information is collected
-            on site.
+            details, requested time, date, group size, and specialty kit count when applicable. Group appointments
+            may be scheduled by one contact person; additional group member information is collected on site.
           </p>
           <p>
             Some requests may require direct review if the location, order, kit, group size, or visit details
@@ -2394,7 +2366,7 @@ function ForgotPasswordPage({ onNavigate }: { onNavigate: (page: PageKey) => voi
 
   const handleReset = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setStatusMessage('Password reset email is not active yet. Use the current Railway admin password for now.');
+    setStatusMessage('Password reset is not active yet. Contact M.R.S. Medical Services ownership to restore admin access.');
   };
 
   return (
@@ -2586,7 +2558,6 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) 
 }
 
 function AdminPage() {
-  const [password, setPassword] = useState(() => window.sessionStorage.getItem('mrsAdminPassword') || '');
   const [requests, setRequests] = useState<AdminRequest[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
@@ -2612,9 +2583,14 @@ function AdminPage() {
   });
   const [blockForm, setBlockForm] = useState({ blockDate: '', timeWindow: '', reason: '' });
 
-  const loadSchedule = async (adminPassword = password) => {
+  const getAdminHeaders = (extraHeaders: Record<string, string> = {}) => {
+    const token = getAdminToken();
+    return token ? { ...extraHeaders, Authorization: `Bearer ${token}` } : extraHeaders;
+  };
+
+  const loadSchedule = async () => {
     const response = await fetch('/api/admin/schedule', {
-      headers: { 'x-admin-password': adminPassword },
+      headers: getAdminHeaders(),
     });
     const result = (await response.json().catch(() => ({}))) as {
       message?: string;
@@ -2630,13 +2606,13 @@ function AdminPage() {
     setBlockedTimes(result.blockedTimes || []);
   };
 
-  const loadRequests = async (adminPassword = password) => {
+  const loadRequests = async () => {
     setStatus('loading');
     setStatusMessage('Loading control center...');
 
     try {
       const response = await fetch('/api/admin/contact-requests', {
-        headers: { 'x-admin-password': adminPassword },
+        headers: getAdminHeaders(),
       });
       const result = (await response.json().catch(() => ({}))) as {
         message?: string;
@@ -2647,9 +2623,8 @@ function AdminPage() {
         throw new Error(result.message || 'Control center could not be loaded.');
       }
 
-      window.sessionStorage.setItem('mrsAdminPassword', adminPassword);
       setRequests(result.requests || []);
-      await loadSchedule(adminPassword);
+      await loadSchedule();
       setStatus('success');
       setStatusMessage('');
     } catch (error) {
@@ -2668,7 +2643,7 @@ function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-password': password,
+          ...getAdminHeaders(),
         },
         body: JSON.stringify(appointmentForm),
       });
@@ -2687,7 +2662,7 @@ function AdminPage() {
         timeWindow: '',
         notes: '',
       });
-      await loadSchedule(password);
+      await loadSchedule();
       setStatus('success');
       setStatusMessage('Appointment saved.');
     } catch (error) {
@@ -2706,7 +2681,7 @@ function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-password': password,
+          ...getAdminHeaders(),
         },
         body: JSON.stringify(blockForm),
       });
@@ -2717,7 +2692,7 @@ function AdminPage() {
       }
 
       setBlockForm({ blockDate: '', timeWindow: '', reason: '' });
-      await loadSchedule(password);
+      await loadSchedule();
       setStatus('success');
       setStatusMessage('Blocked time saved.');
     } catch (error) {
@@ -2728,7 +2703,7 @@ function AdminPage() {
 
   const handleLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void loadRequests(password);
+    void loadRequests();
   };
 
   const handleManualIntake = async (event: FormEvent<HTMLFormElement>) => {
@@ -2741,7 +2716,7 @@ function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-password': password,
+          ...getAdminHeaders(),
         },
         body: JSON.stringify(manualForm),
       });
@@ -2760,7 +2735,7 @@ function AdminPage() {
         preferredTimeWindow: '',
         message: '',
       });
-      await loadRequests(password);
+      await loadRequests();
       setStatus('success');
       setStatusMessage('Manual intake saved.');
     } catch (error) {
@@ -2768,6 +2743,8 @@ function AdminPage() {
       setStatusMessage(error instanceof Error ? error.message : 'Manual intake could not be saved.');
     }
   };
+
+  const hasAdminSession = Boolean(getAdminToken());
 
   return (
     <main>
@@ -2779,17 +2756,8 @@ function AdminPage() {
         <div className="wrap admin-layout">
           <form className="contact-form admin-panel" onSubmit={handleLogin}>
             <h2>Admin access</h2>
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button className="btn primary" type="submit" disabled={status === 'loading'}>
+            <p className="field-help">Use the sign-in page to start an approved admin session before opening this view.</p>
+            <button className="btn primary" type="submit" disabled={status === 'loading' || !hasAdminSession}>
               {status === 'loading' ? 'Loading...' : 'Open Control Center'}
             </button>
             {statusMessage && (
@@ -2871,7 +2839,7 @@ function AdminPage() {
                 required
               />
             </label>
-            <button className="btn primary" type="submit" disabled={status === 'loading' || !password}>
+            <button className="btn primary" type="submit" disabled={status === 'loading' || !hasAdminSession}>
               Save Manual Intake
             </button>
           </form>
@@ -2879,7 +2847,7 @@ function AdminPage() {
           <section className="admin-panel admin-requests">
             <div className="admin-panel-header">
               <h2>Saved requests</h2>
-              <button className="btn secondary" type="button" onClick={() => void loadRequests()} disabled={!password}>
+              <button className="btn secondary" type="button" onClick={() => void loadRequests()} disabled={!hasAdminSession}>
                 Refresh
               </button>
             </div>
@@ -2996,7 +2964,7 @@ function AdminPage() {
                 onChange={(event) => setAppointmentForm({ ...appointmentForm, notes: event.target.value })}
               />
             </label>
-            <button className="btn primary" type="submit" disabled={status === 'loading' || !password}>
+            <button className="btn primary" type="submit" disabled={status === 'loading' || !hasAdminSession}>
               Save Appointment
             </button>
           </form>
@@ -3034,7 +3002,7 @@ function AdminPage() {
                 onChange={(event) => setBlockForm({ ...blockForm, reason: event.target.value })}
               />
             </label>
-            <button className="btn primary" type="submit" disabled={status === 'loading' || !password}>
+            <button className="btn primary" type="submit" disabled={status === 'loading' || !hasAdminSession}>
               Save Block
             </button>
           </form>
@@ -3042,7 +3010,7 @@ function AdminPage() {
           <section className="admin-panel admin-requests">
             <div className="admin-panel-header">
               <h2>Schedule</h2>
-              <button className="btn secondary" type="button" onClick={() => void loadSchedule()} disabled={!password}>
+              <button className="btn secondary" type="button" onClick={() => void loadSchedule()} disabled={!hasAdminSession}>
                 Refresh
               </button>
             </div>

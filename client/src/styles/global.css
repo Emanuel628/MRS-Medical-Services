@@ -571,6 +571,15 @@ a {
   padding: 0 12px;
 }
 
+.count-field {
+  width: min(100%, 240px);
+  justify-self: start;
+}
+
+.contact-form .count-field input[type='number'] {
+  width: 100%;
+}
+
 .contact-form select {
   height: 44px;
   padding: 0 12px;

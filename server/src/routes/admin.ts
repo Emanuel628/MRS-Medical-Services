@@ -61,11 +61,6 @@ function hasDatabaseUrl() {
   return Boolean(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL);
 }
 
-function isAuthorized(value: unknown) {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  return Boolean(adminPassword && typeof value === 'string' && value === adminPassword);
-}
-
 function getSiteOrigin(request: { protocol: string; get(name: string): string | undefined }) {
   return process.env.SITE_ORIGIN || process.env.CLIENT_ORIGIN || `${request.protocol}://${request.get('host')}`;
 }
@@ -164,29 +159,6 @@ async function hasApprovedAdmin() {
   return Boolean(result.rowCount);
 }
 
-async function approveBootstrapAdmin(email: string, password: string) {
-  const result = await pool.query<{ id: string }>(
-    `INSERT INTO admin_users (email, password_hash, status, approved_at)
-     VALUES ($1, $2, 'approved', NOW())
-     ON CONFLICT (email) DO UPDATE
-     SET password_hash = EXCLUDED.password_hash,
-       status = 'approved',
-       approved_at = COALESCE(admin_users.approved_at, NOW())
-     RETURNING id`,
-    [email, hashPassword(password)],
-  );
-
-  await pool.query(
-    `UPDATE admin_registration_requests
-     SET status = 'approved',
-       decided_at = COALESCE(decided_at, NOW())
-     WHERE email = $1 AND status = 'pending'`,
-    [email],
-  );
-
-  return result.rows[0]?.id || '';
-}
-
 async function sendAdminRegistrationEmail(request: { protocol: string; get(name: string): string | undefined }, email: string, token: string) {
   if (!resend) return;
 
@@ -227,8 +199,6 @@ async function sendRegistrationDecisionEmail(email: string, approved: boolean) {
 }
 
 async function isAuthorizedRequest(request: Request) {
-  if (isAuthorized(request.header('x-admin-password'))) return true;
-
   const authorization = request.header('authorization') || '';
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
   if (!token || !hasDatabaseUrl()) return false;
@@ -364,15 +334,6 @@ router.post('/auth/login', async (request, response) => {
     );
     const row = user.rows[0];
     if (!row || row.status !== 'approved' || !verifyPassword(password, row.passwordHash)) {
-      if (isAuthorized(password)) {
-        const userId = await approveBootstrapAdmin(email, password);
-        if (userId) {
-          const session = await createAdminSession(userId);
-          response.json({ message: 'Signed in.', token: session.token, expiresAt: session.expiresAt.toISOString() });
-          return;
-        }
-      }
-
       response.status(401).json({ message: 'Email or password is incorrect, or the account is not approved yet.' });
       return;
     }
@@ -581,8 +542,10 @@ router.post('/billing/checkout-session', async (request, response) => {
     }
 
     const checkoutUrls = getStripeCheckoutUrls();
+    const expiresAt = Math.floor(Date.now() / 1000) + 30 * 60;
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      expires_at: expiresAt,
       success_url: checkoutUrls.successUrl,
       cancel_url: checkoutUrls.cancelUrl,
       customer_email: customerEmail || undefined,

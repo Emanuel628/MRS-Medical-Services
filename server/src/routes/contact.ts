@@ -211,9 +211,13 @@ export async function ensureDatabase() {
       event_type TEXT NOT NULL,
       contact_request_id UUID,
       stripe_checkout_session_id TEXT,
+      status VARCHAR(30) NOT NULL DEFAULT 'processed',
+      last_error TEXT,
       processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query('ALTER TABLE stripe_webhook_events ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT \'processed\'');
+  await pool.query('ALTER TABLE stripe_webhook_events ADD COLUMN IF NOT EXISTS last_error TEXT');
   databaseReady = true;
 }
 
@@ -621,8 +625,10 @@ async function createPatientCheckoutSession(request: Request, savedRequest: Save
   if (!stripe || !savedRequest.quotedPriceCents) return null;
 
   const origin = getSiteOrigin(request);
+  const expiresAt = Math.floor(Date.now() / 1000) + checkoutReservationMinutes * 60;
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    expires_at: expiresAt,
     success_url: `${origin}/intake?payment=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/intake?payment=cancelled`,
     customer_email: cleanField(body.email),
@@ -1053,13 +1059,23 @@ router.post('/stripe-webhook', async (request, response) => {
 
   try {
     await ensureDatabase();
-    const inserted = await pool.query(
-      `INSERT INTO stripe_webhook_events (id, event_type)
-       VALUES ($1, $2)
-       ON CONFLICT (id) DO NOTHING`,
+    const eventRecord = await pool.query<{ status: string }>(
+      `INSERT INTO stripe_webhook_events (id, event_type, status, last_error)
+       VALUES ($1, $2, 'processing', NULL)
+       ON CONFLICT (id) DO UPDATE
+       SET event_type = EXCLUDED.event_type,
+         status = CASE
+           WHEN stripe_webhook_events.status = 'processed' THEN stripe_webhook_events.status
+           ELSE 'processing'
+         END,
+         last_error = CASE
+           WHEN stripe_webhook_events.status = 'processed' THEN stripe_webhook_events.last_error
+           ELSE NULL
+         END
+       RETURNING status`,
       [event.id, event.type],
     );
-    if (!inserted.rowCount) {
+    if (eventRecord.rows[0]?.status === 'processed') {
       response.json({ received: true, duplicate: true });
       return;
     }
@@ -1104,9 +1120,25 @@ router.post('/stripe-webhook', async (request, response) => {
       console.info('Stripe refund webhook received before refund workflow is enabled', event.type);
     }
 
+    await pool.query(
+      `UPDATE stripe_webhook_events
+       SET status = 'processed',
+         last_error = NULL,
+         processed_at = NOW()
+       WHERE id = $1`,
+      [event.id],
+    );
+
     response.json({ received: true });
   } catch (error) {
     console.error('Stripe webhook processing failed', error);
+    await pool.query(
+      `UPDATE stripe_webhook_events
+       SET status = 'failed',
+         last_error = $2
+       WHERE id = $1`,
+      [event.id, error instanceof Error ? error.message.slice(0, 500) : 'Unknown webhook processing error'],
+    ).catch((updateError) => console.error('Stripe webhook failure state could not be saved', updateError));
     response.status(500).json({ message: 'Stripe webhook could not be processed.' });
   }
 });
