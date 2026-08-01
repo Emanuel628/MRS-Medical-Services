@@ -1334,7 +1334,9 @@ function IntakePage() {
                 )}
               </div>
               {form.paymentMethod === 'pay_at_site' && (
-                <p className="payment-warning">Checks and Venmo are not accepted. On-site payment is processed through Square only.</p>
+                <p className="payment-warning">
+                  Checks and Venmo are <strong>NOT</strong> accepted. On-site payment is processed through Square only.
+                </p>
               )}
             </fieldset>
 
