@@ -40,6 +40,7 @@
   .process-layout, .reviews-grid, .faq-grid { grid-template-columns: 1fr; gap: 48px; }
   .process-intro { max-width: 640px; }
   .about-grid { gap: 58px; }
+  .intake-columns { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
   .footer-brand { grid-column: 1 / -1; }
 }
@@ -70,6 +71,7 @@
   .footer-grid { grid-template-columns: 1fr; gap: 42px; }
   .footer-brand { grid-column: auto; }
   .footer-bottom { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .payment-method-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {
@@ -89,6 +91,7 @@
   .service-row p { line-height: 1.5; }
   .about-photo { min-height: 340px; border-radius: 12px; }
   .check-list li { align-items: flex-start; }
+  .form-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 390px) {

@@ -189,6 +189,35 @@ function getPasswordStrengthLabel(score: number) {
   return 'Strong';
 }
 
+function estimateOneWayTravelMinutes(zipCode: string) {
+  const prefix = zipCode.trim().slice(0, 3);
+  if (prefix === '087' || prefix === '077') return 60;
+  if (['080', '081', '085', '086', '088'].includes(prefix)) return 90;
+  return null;
+}
+
+function calculateIntakeTotal(zipCode: string, requestedDate: string, timeWindow: string, patientCount: number) {
+  const travelMinutes = estimateOneWayTravelMinutes(zipCode);
+  if (!travelMinutes) return null;
+
+  const baseFee = travelMinutes <= 60 ? 90 : travelMinutes <= 90 ? 125 : travelMinutes <= 120 ? 150 : travelMinutes <= 150 ? 175 : null;
+  if (baseFee === null) return null;
+
+  const date = requestedDate ? new Date(`${requestedDate}T12:00:00`) : null;
+  const day = date && !Number.isNaN(date.getTime()) ? date.getDay() : null;
+  const startHour = getTimeWindowStartHour(timeWindow);
+  const weekendFee = day === 0 || day === 6 ? 25 : 0;
+  const earlyOrEveningFee = startHour !== null && (startHour < 6 || startHour >= 19) ? 25 : 0;
+  const additionalPatientsFee = Math.max(0, patientCount - 1) * 35;
+
+  return baseFee + weekendFee + earlyOrEveningFee + additionalPatientsFee;
+}
+
+function formatCurrency(value: number | null) {
+  if (value === null) return 'Custom quote';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+}
+
 function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/services')) return 'services';
   if (pathname.startsWith('/intake')) return 'intake';
@@ -724,6 +753,7 @@ function IntakePage() {
     preferredLab: '',
     requestedDate: '',
     preferredTimeWindow: '',
+    patientCount: 1,
     prescriptionReady: false,
     hasKit: false,
     paymentMethod: 'card',
@@ -735,6 +765,7 @@ function IntakePage() {
   });
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showServiceAreaNotice, setShowServiceAreaNotice] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
@@ -750,6 +781,11 @@ function IntakePage() {
       .map((blocked) => blocked.timeWindow),
   );
   const selectedUnavailableWindows = getUnavailableWindows(selectedBlockedWindows, form.hasKit);
+  const cardTotal = calculateIntakeTotal(form.zipCode, form.requestedDate, form.preferredTimeWindow, form.patientCount);
+  const missingDate = attemptedSubmit && !form.requestedDate;
+  const missingTime = attemptedSubmit && !form.preferredTimeWindow;
+  const missingInsurance = attemptedSubmit && form.paymentMethod === 'insurance' &&
+    (!form.insuranceProvider || !form.insuranceMemberId || !form.policyholderName);
   const unavailableByDate = blockedTimes.reduce<Record<string, Set<string>>>((availability, blocked) => {
     const key = getScheduleDateKey(blocked.blockDate);
     availability[key] = availability[key] || new Set<string>();
@@ -896,6 +932,7 @@ function IntakePage() {
       `Preferred lab: ${form.preferredLab || 'Not specified'}`,
       `Requested date: ${form.requestedDate || 'Not specified'}`,
       `Preferred time window: ${form.preferredTimeWindow || 'Not specified'}`,
+      `Number of people: ${form.patientCount}`,
       `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
       `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
       `Payment method: ${form.paymentMethod === 'insurance' ? 'Insurance' : form.paymentMethod === 'pay_at_site' ? 'Pay at site' : 'Card checkout'}`,
@@ -933,6 +970,7 @@ function IntakePage() {
           state: form.state,
           preferredLab: form.preferredLab,
           prescriptionReady: form.prescriptionReady,
+          patientCount: form.patientCount,
           paymentMethod: form.paymentMethod,
           insuranceProvider: form.insuranceProvider,
           insuranceMemberId: form.insuranceMemberId,
@@ -961,6 +999,7 @@ function IntakePage() {
 
       setStatus('success');
       setStatusMessage('Your intake form was sent. Please watch for a confirmation email.');
+      setAttemptedSubmit(false);
       setShowConfirmation(true);
     } catch (error) {
       setStatus('error');
@@ -991,7 +1030,14 @@ function IntakePage() {
             <p>Specialty kit collections must be scheduled before 10 AM.</p>
           </div>
 
-          <form className="contact-form intake-form" onSubmit={handleSubmit}>
+          <form
+            className={`contact-form intake-form ${attemptedSubmit ? 'submitted' : ''}`}
+            onSubmit={handleSubmit}
+            onInvalid={() => setAttemptedSubmit(true)}
+          >
+            <div className="intake-columns">
+              <section className="intake-panel" aria-labelledby="patient-info-title">
+                <h2 id="patient-info-title">Patient info</h2>
             <div className="form-grid">
               <label>
                 Full name
@@ -1114,7 +1160,6 @@ function IntakePage() {
                 <select
                   value={form.preferredLab}
                   onChange={(event) => setForm({ ...form, preferredLab: event.target.value })}
-                  required
                 >
                   <option value="">Select if known</option>
                   {labOptions.map((lab) => (
@@ -1143,8 +1188,23 @@ function IntakePage() {
                 I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
               </label>
             </div>
+              </section>
 
-            <div className="booking-calendar" aria-label="Visit availability picker">
+              <section className="intake-panel appointment-panel" aria-labelledby="appointment-info-title">
+                <h2 id="appointment-info-title">Appointment info</h2>
+            <label>
+              Number of people
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={form.patientCount}
+                onChange={(event) => setForm({ ...form, patientCount: Math.max(1, Number(event.target.value) || 1) })}
+                required
+              />
+            </label>
+
+            <div className={`booking-calendar ${missingDate || missingTime ? 'field-invalid' : ''}`} aria-label="Visit availability picker">
               <div className="calendar-header">
                 <button
                   className="calendar-nav"
@@ -1252,40 +1312,50 @@ function IntakePage() {
 
             <fieldset className="payment-methods">
               <legend>Payment method</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="card"
-                  checked={form.paymentMethod === 'card'}
-                  onChange={() => setForm({ ...form, paymentMethod: 'card' })}
-                />
-                <span>Secure card checkout</span>
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="insurance"
-                  checked={form.paymentMethod === 'insurance'}
-                  onChange={() => setForm({ ...form, paymentMethod: 'insurance' })}
-                />
-                <span>Paid by insurance</span>
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="pay_at_site"
-                  checked={form.paymentMethod === 'pay_at_site'}
-                  onChange={() => setForm({ ...form, paymentMethod: 'pay_at_site' })}
-                />
-                <span>Pay at site</span>
-              </label>
+              <div className="payment-method-grid">
+                <div className="payment-option-list">
+                  <label>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="card"
+                      checked={form.paymentMethod === 'card'}
+                      onChange={() => setForm({ ...form, paymentMethod: 'card' })}
+                    />
+                    <span>Secure card checkout</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="insurance"
+                      checked={form.paymentMethod === 'insurance'}
+                      onChange={() => setForm({ ...form, paymentMethod: 'insurance' })}
+                    />
+                    <span>Paid by insurance</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="pay_at_site"
+                      checked={form.paymentMethod === 'pay_at_site'}
+                      onChange={() => setForm({ ...form, paymentMethod: 'pay_at_site' })}
+                    />
+                    <span>Pay at site</span>
+                  </label>
+                </div>
+                {form.paymentMethod === 'card' && (
+                  <div className="checkout-total" aria-live="polite">
+                    <span>Checkout total</span>
+                    <strong>{formatCurrency(cardTotal)}</strong>
+                  </div>
+                )}
+              </div>
             </fieldset>
 
             {form.paymentMethod === 'insurance' && (
-              <div className="form-grid insurance-fields">
+              <div className={`form-grid insurance-fields ${missingInsurance ? 'field-invalid' : ''}`}>
                 <label>
                   Insurance provider
                   <input
@@ -1319,6 +1389,8 @@ function IntakePage() {
                 </label>
               </div>
             )}
+              </section>
+            </div>
 
             <button className="btn primary" type="submit" disabled={status === 'sending'}>
               {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Intake'}
@@ -2625,7 +2697,7 @@ function getCalendarDays(monthDate: Date): Array<Date | null> {
 
 function getTimeWindowStartHour(value: string) {
   const match = value.match(/^(\d+)\s(AM|PM)/);
-  if (!match) return 0;
+  if (!match) return null;
 
   const hour = Number(match[1]);
   if (match[2] === 'AM') return hour === 12 ? 0 : hour;
@@ -2633,7 +2705,7 @@ function getTimeWindowStartHour(value: string) {
 }
 
 function isKitRestrictedWindow(value: string) {
-  return getTimeWindowStartHour(value) >= 10;
+  return (getTimeWindowStartHour(value) ?? 0) >= 10;
 }
 
 function getUnavailableWindows(blockedWindows: Set<string>, hasKit: boolean) {

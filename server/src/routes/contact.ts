@@ -541,10 +541,11 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
     cleanOptionalNumber(body.additionalPatientFeeCents) !== undefined;
   const priceQuote = requestType === 'intake'
     ? calculateIntakeVisitPrice({
-        zipCode,
-        appointmentDate: preferredDate,
-        timeWindow: preferredTimeWindow,
-      })
+      zipCode,
+      appointmentDate: preferredDate,
+      timeWindow: preferredTimeWindow,
+      patientCount: cleanOptionalNumber(body.patientCount),
+    })
     : hasPricingInputs
     ? calculateVisitPrice({
         oneWayTravelMinutes,
