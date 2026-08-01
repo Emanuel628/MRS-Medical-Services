@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { Resend } from 'resend';
 import { pool } from '../config/database.js';
 import { getStripeCheckoutUrls, getStripeClient, getStripeCurrency } from '../config/stripe.js';
-import { ensureDatabase, markRequestConfirmedByMrsms, saveContactRequest } from './contact.js';
+import { ensureDatabase, markRequestConfirmedByMrsms, saveContactRequest, updatePaymentStatus } from './contact.js';
 
 const router = Router();
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -62,7 +62,14 @@ function hasDatabaseUrl() {
 }
 
 function getSiteOrigin(request: { protocol: string; get(name: string): string | undefined }) {
-  return process.env.SITE_ORIGIN || process.env.CLIENT_ORIGIN || `${request.protocol}://${request.get('host')}`;
+  const configuredOrigin = cleanField(process.env.SITE_ORIGIN || process.env.CLIENT_ORIGIN);
+  if (configuredOrigin) return configuredOrigin;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SITE_ORIGIN is not configured.');
+  }
+
+  return `${request.protocol}://${request.get('host')}`;
 }
 
 function cleanEmail(value: unknown) {
@@ -396,32 +403,50 @@ router.post('/auth/registration/:token/decision', async (request, response) => {
       }
     }
 
-    const pending = await pool.query<{ id: string; email: string; passwordHash: string; status: string; requestedAt: string }>(
-      `SELECT id, email, password_hash AS "passwordHash", status
-        , requested_at AS "requestedAt"
+    const lookup = await pool.query<{ id: string; status: string; requestedAt: string }>(
+      `SELECT id, status, requested_at AS "requestedAt"
        FROM admin_registration_requests
        WHERE decision_token = $1
        LIMIT 1`,
       [cleanField(request.params.token)],
     );
-    const row = pending.rows[0];
-    if (!row) {
+    const found = lookup.rows[0];
+    if (!found) {
       response.status(404).json({ message: 'Account request could not be found.' });
       return;
     }
-    if (row.status !== 'pending') {
-      response.status(409).json({ message: `This account request was already ${row.status}.` });
-      return;
-    }
-    if (Date.parse(row.requestedAt) < Date.now() - 24 * 60 * 60 * 1000) {
+
+    if (found.status === 'pending' && Date.parse(found.requestedAt) < Date.now() - 24 * 60 * 60 * 1000) {
       await pool.query(
         `UPDATE admin_registration_requests
          SET status = 'expired',
            decided_at = NOW()
          WHERE id = $1 AND status = 'pending'`,
-        [row.id],
+        [found.id],
       );
       response.status(410).json({ message: 'This account request expired. Ask the user to register again.' });
+      return;
+    }
+
+    // A single atomic conditional UPDATE is the race guard: if two admins (or
+    // two clicks) hit this at once, only the request that actually flips the
+    // row from 'pending' gets a non-empty RETURNING and is allowed to create
+    // the admin account below. The loser sees 0 rows changed and reports a
+    // conflict instead of silently overwriting the other decision.
+    const decided = await pool.query<{ email: string; passwordHash: string }>(
+      `UPDATE admin_registration_requests
+       SET status = $2, decided_at = NOW()
+       WHERE id = $1 AND status = 'pending'
+       RETURNING email, password_hash AS "passwordHash"`,
+      [found.id, decision === 'approve' ? 'approved' : 'denied'],
+    );
+    const row = decided.rows[0];
+    if (!row) {
+      const current = await pool.query<{ status: string }>(
+        `SELECT status FROM admin_registration_requests WHERE id = $1`,
+        [found.id],
+      );
+      response.status(409).json({ message: `This account request was already ${current.rows[0]?.status || 'decided'}.` });
       return;
     }
 
@@ -434,12 +459,6 @@ router.post('/auth/registration/:token/decision', async (request, response) => {
         [row.email, row.passwordHash],
       );
     }
-    await pool.query(
-      `UPDATE admin_registration_requests
-       SET status = $1, decided_at = NOW()
-       WHERE id = $2`,
-      [decision === 'approve' ? 'approved' : 'denied', row.id],
-    );
     await sendRegistrationDecisionEmail(row.email, decision === 'approve');
     response.json({ message: decision === 'approve' ? 'Account approved.' : 'Account denied.' });
   } catch (error) {
@@ -530,10 +549,19 @@ router.post('/billing/checkout-session', async (request, response) => {
         return;
       }
 
-      amountCents ??= row.quotedPriceCents;
+      // The quoted price is the source of truth for anything linked to an
+      // appointment request; a client-submitted amount can never override it,
+      // otherwise payment confirmation could be tricked into auto-confirming
+      // an appointment for less than what was quoted.
+      amountCents = row.quotedPriceCents;
       customerEmail ||= row.email || '';
       customerName ||= row.fullName;
       description ||= `M.R.S. Medical Services visit for ${row.fullName}`;
+
+      if (!amountCents || amountCents < 50) {
+        response.status(400).json({ message: 'This request does not have a quoted price yet.' });
+        return;
+      }
     }
 
     if (!amountCents || amountCents < 50) {
@@ -550,10 +578,9 @@ router.post('/billing/checkout-session', async (request, response) => {
       cancel_url: checkoutUrls.cancelUrl,
       customer_email: customerEmail || undefined,
       client_reference_id: contactRequestId || undefined,
-      metadata: {
-        contactRequestId: contactRequestId || '',
-        customerName,
-      },
+      metadata: contactRequestId
+        ? { contactRequestId, paymentFor: 'patient_intake', customerName }
+        : { customerName },
       line_items: [
         {
           quantity: 1,
@@ -568,6 +595,10 @@ router.post('/billing/checkout-session', async (request, response) => {
       ],
     });
 
+    if (contactRequestId) {
+      await updatePaymentStatus(contactRequestId, 'checkout_pending', session.id);
+    }
+
     response.json({
       message: 'Checkout session created.',
       id: session.id,
@@ -580,16 +611,78 @@ router.post('/billing/checkout-session', async (request, response) => {
   }
 });
 
-router.get('/contact-requests', async (_request, response) => {
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 50;
+
+function maskStripeId(value: string | null) {
+  if (!value) return null;
+  return value.length <= 6 ? '••••' : `••••${value.slice(-6)}`;
+}
+
+router.get('/contact-requests', async (request, response) => {
   if (!hasDatabaseUrl()) {
     response.status(503).json({ message: 'Database is not configured.' });
     return;
   }
 
+  const page = Math.max(1, cleanInteger(request.query.page) || 1);
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, cleanInteger(request.query.pageSize) || DEFAULT_PAGE_SIZE));
+  const offset = (page - 1) * pageSize;
+
   try {
     await ensureDatabase();
-    const result = await pool.query(`
-      SELECT
+    const [totalResult, result] = await Promise.all([
+      pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM contact_requests'),
+      pool.query(
+        `SELECT
+          id,
+          full_name AS "fullName",
+          phone,
+          email,
+          status,
+          request_type AS "requestType",
+          preferred_date AS "preferredDate",
+          preferred_time_window AS "preferredTimeWindow",
+          payment_method AS "paymentMethod",
+          payment_status AS "paymentStatus",
+          payment_review_status AS "paymentReviewStatus",
+          quoted_price_cents AS "quotedPriceCents",
+          created_at AS "createdAt"
+        FROM contact_requests
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2`,
+        [pageSize, offset],
+      ),
+    ]);
+
+    response.json({
+      requests: result.rows,
+      page,
+      pageSize,
+      total: Number(totalResult.rows[0]?.count || 0),
+    });
+  } catch (error) {
+    console.error('Admin contact request list failed', error);
+    response.status(500).json({ message: 'Saved requests could not be loaded.' });
+  }
+});
+
+router.get('/contact-requests/:id', async (request, response) => {
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Database is not configured.' });
+    return;
+  }
+
+  const id = cleanField(request.params.id);
+  if (!id) {
+    response.status(400).json({ message: 'Request id is required.' });
+    return;
+  }
+
+  try {
+    await ensureDatabase();
+    const result = await pool.query(
+      `SELECT
         id,
         full_name AS "fullName",
         email,
@@ -614,7 +707,10 @@ router.get('/contact-requests', async (_request, response) => {
         pricing_quote AS "pricingQuote",
         payment_method AS "paymentMethod",
         payment_status AS "paymentStatus",
+        payment_review_status AS "paymentReviewStatus",
         stripe_checkout_session_id AS "stripeCheckoutSessionId",
+        refunded_at AS "refundedAt",
+        refund_amount_cents AS "refundAmountCents",
         status,
         request_type AS "requestType",
         service_area AS "serviceArea",
@@ -623,14 +719,21 @@ router.get('/contact-requests', async (_request, response) => {
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM contact_requests
-      ORDER BY created_at DESC
-      LIMIT 100
-    `);
+      WHERE id = $1
+      LIMIT 1`,
+      [id],
+    );
 
-    response.json({ requests: result.rows });
+    const row = result.rows[0];
+    if (!row) {
+      response.status(404).json({ message: 'Contact request could not be found.' });
+      return;
+    }
+
+    response.json({ request: { ...row, stripeCheckoutSessionId: maskStripeId(row.stripeCheckoutSessionId) } });
   } catch (error) {
-    console.error('Admin contact request list failed', error);
-    response.status(500).json({ message: 'Saved requests could not be loaded.' });
+    console.error('Admin contact request detail failed', error);
+    response.status(500).json({ message: 'This request could not be loaded.' });
   }
 });
 
@@ -692,6 +795,106 @@ router.post('/contact-requests/:id/confirm', async (request, response) => {
   } catch (error) {
     console.error('MRSMS confirmation failed', error);
     response.status(500).json({ message: 'Appointment could not be confirmed right now.' });
+  }
+});
+
+router.post('/contact-requests/:id/refund', async (request, response) => {
+  if (!hasDatabaseUrl()) {
+    response.status(503).json({ message: 'Database is not configured.' });
+    return;
+  }
+
+  const stripe = getStripeClient();
+  if (!stripe) {
+    response.status(503).json({ message: 'Stripe is not configured.' });
+    return;
+  }
+
+  const id = cleanField(request.params.id);
+  if (!id) {
+    response.status(400).json({ message: 'Request id is required.' });
+    return;
+  }
+
+  try {
+    await ensureDatabase();
+    const lookup = await pool.query<{
+      paymentStatus: string | null;
+      stripeCheckoutSessionId: string | null;
+      quotedPriceCents: number | null;
+    }>(
+      `SELECT
+        payment_status AS "paymentStatus",
+        stripe_checkout_session_id AS "stripeCheckoutSessionId",
+        quoted_price_cents AS "quotedPriceCents"
+      FROM contact_requests
+      WHERE id = $1
+      LIMIT 1`,
+      [id],
+    );
+    const row = lookup.rows[0];
+    if (!row) {
+      response.status(404).json({ message: 'Contact request could not be found.' });
+      return;
+    }
+    if (row.paymentStatus !== 'paid') {
+      response.status(409).json({ message: 'This request is not marked as paid.' });
+      return;
+    }
+    if (!row.stripeCheckoutSessionId) {
+      response.status(409).json({ message: 'No Stripe checkout session is on file for this request.' });
+      return;
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(row.stripeCheckoutSessionId);
+    const paymentIntentId = typeof session.payment_intent === 'string'
+      ? session.payment_intent
+      : session.payment_intent?.id;
+    if (!paymentIntentId) {
+      response.status(409).json({ message: 'No completed payment could be located for this request.' });
+      return;
+    }
+
+    const refund = await stripe.refunds.create({ payment_intent: paymentIntentId });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE contact_requests
+         SET payment_status = 'refunded',
+           payment_review_status = 'refunded',
+           refunded_at = NOW(),
+           refund_amount_cents = $2,
+           stripe_refund_id = $3,
+           status = CASE WHEN status <> 'cancelled' THEN 'cancelled' ELSE status END,
+           canceled_at = COALESCE(canceled_at, NOW()),
+           updated_at = NOW()
+         WHERE id = $1`,
+        [id, refund.amount ?? row.quotedPriceCents, refund.id],
+      );
+      await client.query(
+        `UPDATE appointment_slot_reservations
+         SET status = 'cancelled', updated_at = NOW()
+         WHERE contact_request_id = $1 AND status <> 'cancelled'`,
+        [id],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    response.json({ message: 'Refund issued.', refundId: refund.id });
+  } catch (error) {
+    console.error('Refund failed', error);
+    await pool.query(
+      `UPDATE contact_requests SET payment_review_status = 'refund_failed', updated_at = NOW() WHERE id = $1`,
+      [id],
+    ).catch((updateError) => console.error('Refund failure state could not be saved', updateError));
+    response.status(500).json({ message: 'Refund could not be completed right now.' });
   }
 });
 

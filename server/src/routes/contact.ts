@@ -4,6 +4,7 @@ import type Stripe from 'stripe';
 import { calculateIntakeVisitPrice, calculateVisitPrice } from '../config/pricing.js';
 import { pool } from '../config/database.js';
 import { getStripeClient, getStripeCurrency, getStripeWebhookSecret } from '../config/stripe.js';
+import { validateContactSubmission } from '../validation/intake.js';
 
 const router = Router();
 
@@ -78,6 +79,7 @@ const appointmentConfirmationNote =
 const kitScheduleNote = 'Specialty kit collections must be scheduled before 10 AM.';
 const reminderIntervalMs = 60 * 60 * 1000;
 const checkoutReservationMinutes = 30;
+const decisionTokenValidityMs = 21 * 24 * 60 * 60 * 1000;
 let remindersStarted = false;
 
 function cleanField(value: unknown) {
@@ -178,6 +180,12 @@ export async function ensureDatabase() {
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS payment_status TEXT');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS insurance_details JSONB');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS stripe_checkout_session_id TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS decision_token_expires_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS decision_token_used_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS payment_review_status TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS refund_amount_cents INTEGER');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS stripe_refund_id TEXT');
   await pool.query('UPDATE contact_requests SET cancel_token = gen_random_uuid() WHERE cancel_token IS NULL');
   await pool.query('UPDATE contact_requests SET patient_confirm_token = gen_random_uuid() WHERE patient_confirm_token IS NULL');
   await pool.query('UPDATE contact_requests SET mrsms_decision_token = gen_random_uuid() WHERE mrsms_decision_token IS NULL');
@@ -234,8 +242,12 @@ function isUuid(value: string) {
 }
 
 function getSiteOrigin(request: Request) {
-  const configuredOrigin = cleanField(process.env.CLIENT_ORIGIN);
+  const configuredOrigin = cleanField(process.env.SITE_ORIGIN || process.env.CLIENT_ORIGIN);
   if (configuredOrigin) return configuredOrigin.replace(/\/$/, '');
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SITE_ORIGIN is not configured.');
+  }
 
   const requestOrigin = cleanField(request.get('origin'));
   if (requestOrigin) return requestOrigin.replace(/\/$/, '');
@@ -545,7 +557,7 @@ function getInsuranceDetails(body: ContactRequest) {
   };
 }
 
-async function updatePaymentStatus(id: string, paymentStatus: string, checkoutSessionId?: string) {
+export async function updatePaymentStatus(id: string, paymentStatus: string, checkoutSessionId?: string) {
   await pool.query(
     `UPDATE contact_requests
      SET payment_status = $2,
@@ -674,43 +686,73 @@ function getSessionPaymentDetails(session: Stripe.Checkout.Session) {
 async function confirmPaidCheckoutSession(session: Stripe.Checkout.Session) {
   if (session.payment_status !== 'paid' || !session.client_reference_id) return null;
 
+  // Only sessions created for the patient intake checkout flow are allowed to
+  // auto-confirm an appointment. Metadata is set by createPatientCheckoutSession
+  // and by the admin billing endpoint when it is invoicing an existing request
+  // for its stored quote; ad-hoc admin invoices without that metadata are
+  // recorded by Stripe but intentionally do not touch appointment state here.
+  if (session.metadata?.paymentFor !== 'patient_intake') return null;
+  if (session.metadata?.contactRequestId !== session.client_reference_id) return null;
+
+  const sessionCurrency = (session.currency || '').toLowerCase();
+  if (sessionCurrency !== getStripeCurrency()) {
+    console.error('Stripe session currency mismatch', session.id, sessionCurrency);
+    return null;
+  }
+
   await ensureDatabase();
-  const result = await pool.query<CancellationRow>(
-    `UPDATE contact_requests
-     SET payment_status = 'paid',
-       stripe_checkout_session_id = $2,
-       status = 'mrsms_confirmed',
-       mrsms_confirmed_at = COALESCE(mrsms_confirmed_at, NOW()),
-       updated_at = NOW()
-     WHERE id = $1
-       AND request_type = 'intake'
-       AND canceled_at IS NULL
-       AND auto_cancelled_at IS NULL
-       AND payment_status IS DISTINCT FROM 'paid'
-     RETURNING
-       full_name AS "fullName",
-       email,
-       phone,
-       preferred_date AS "preferredDate",
-       preferred_time_window AS "preferredTimeWindow",
-       status,
-       cancel_token AS "cancelToken"`,
-    [session.client_reference_id, session.id],
-  );
-  const row = result.rows[0];
-  if (!row) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query<CancellationRow>(
+      `UPDATE contact_requests
+       SET payment_status = 'paid',
+         stripe_checkout_session_id = $2,
+         status = 'mrsms_confirmed',
+         mrsms_confirmed_at = COALESCE(mrsms_confirmed_at, NOW()),
+         updated_at = NOW()
+       WHERE id = $1
+         AND request_type = 'intake'
+         AND canceled_at IS NULL
+         AND auto_cancelled_at IS NULL
+         AND payment_status IS DISTINCT FROM 'paid'
+         AND stripe_checkout_session_id = $2
+         AND quoted_price_cents = $3
+       RETURNING
+         id,
+         full_name AS "fullName",
+         email,
+         phone,
+         preferred_date AS "preferredDate",
+         preferred_time_window AS "preferredTimeWindow",
+         status,
+         cancel_token AS "cancelToken"`,
+      [session.client_reference_id, session.id, session.amount_total],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      await client.query('ROLLBACK');
+      return null;
+    }
 
-  await pool.query(
-    `UPDATE appointment_slot_reservations
-     SET status = 'confirmed',
-       stripe_checkout_session_id = $2,
-       expires_at = NULL,
-       updated_at = NOW()
-     WHERE contact_request_id = $1`,
-    [session.client_reference_id, session.id],
-  );
+    await client.query(
+      `UPDATE appointment_slot_reservations
+       SET status = 'confirmed',
+         stripe_checkout_session_id = $2,
+         expires_at = NULL,
+         updated_at = NOW()
+       WHERE contact_request_id = $1`,
+      [session.client_reference_id, session.id],
+    );
 
-  return row;
+    await client.query('COMMIT');
+    return row;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function expireCheckoutSessionReservation(session: Stripe.Checkout.Session) {
@@ -837,7 +879,8 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         pricing_quote,
         payment_method,
         payment_status,
-        insurance_details
+        insurance_details,
+        decision_token_expires_at
       )
       VALUES (
         $1, $2, $3, $4, $5,
@@ -845,7 +888,7 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         $11, $12, $13, $14, $15,
         $16, $17, $18, $19, $20,
         $21, $22, $23, $24, $25,
-        $26, $27, $28
+        $26, $27, $28, $29
       )
       RETURNING
         id,
@@ -882,6 +925,7 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         paymentMethod,
         paymentMethod ? getPaymentStatus(paymentMethod) : null,
         insuranceDetails ? JSON.stringify(insuranceDetails) : null,
+        requestType === 'intake' ? new Date(Date.now() + decisionTokenValidityMs) : null,
       ],
     );
 
@@ -923,21 +967,9 @@ router.post('/', async (request, response) => {
   const hasKit = body.hasKit === true;
   const paymentMethod = requestType === 'intake' ? cleanPaymentMethod(cleanField(body.paymentMethod)) : null;
 
-  if (!name || !phone || !email || !message) {
-    response.status(400).json({ message: 'Name, phone, email, and message are required.' });
-    return;
-  }
-
-  if (requestType === 'intake' && paymentMethod === 'insurance') {
-    const insurance = getInsuranceDetails(body);
-    if (!insurance.provider || !insurance.memberId || !insurance.policyholderName) {
-      response.status(400).json({ message: 'Insurance provider, member ID, and policyholder name are required.' });
-      return;
-    }
-  }
-
-  if (requestType === 'intake' && body.termsAccepted !== true) {
-    response.status(400).json({ message: 'Terms & Conditions and Privacy Policy acknowledgement is required.' });
+  const validationError = validateContactSubmission(body as Record<string, unknown>);
+  if (validationError) {
+    response.status(400).json({ message: validationError });
     return;
   }
 
@@ -1448,7 +1480,7 @@ router.get('/staff-decision/:token', async (request, response) => {
 
   try {
     await ensureDatabase();
-    const result = await pool.query<CancellationRow & { streetAddress?: string | null }>(
+    const result = await pool.query<CancellationRow & { decisionTokenExpiresAt: string | Date | null; decisionTokenUsedAt: string | Date | null }>(
       `SELECT
         full_name AS "fullName",
         email,
@@ -1456,7 +1488,9 @@ router.get('/staff-decision/:token', async (request, response) => {
         preferred_date AS "preferredDate",
         preferred_time_window AS "preferredTimeWindow",
         status,
-        mrsms_confirmed_at AS "patientConfirmedAt"
+        mrsms_confirmed_at AS "patientConfirmedAt",
+        decision_token_expires_at AS "decisionTokenExpiresAt",
+        decision_token_used_at AS "decisionTokenUsedAt"
       FROM contact_requests
       WHERE mrsms_decision_token = $1 AND request_type = 'intake'
       LIMIT 1`,
@@ -1465,6 +1499,16 @@ router.get('/staff-decision/:token', async (request, response) => {
     const row = result.rows[0];
     if (!row) {
       response.status(404).json({ message: 'Appointment request could not be found.' });
+      return;
+    }
+
+    if (row.decisionTokenUsedAt || row.status !== 'new') {
+      response.status(409).json({ message: 'This appointment request has already been reviewed.' });
+      return;
+    }
+
+    if (row.decisionTokenExpiresAt && new Date(row.decisionTokenExpiresAt).getTime() < Date.now()) {
+      response.status(410).json({ message: 'This review link has expired. Please review this request from the control center instead.' });
       return;
     }
 
@@ -1497,13 +1541,15 @@ router.post('/staff-decision/:token', async (request, response) => {
       `UPDATE contact_requests
       SET
         status = $2,
-        mrsms_confirmed_at = CASE WHEN $2 = 'mrsms_confirmed' THEN COALESCE(mrsms_confirmed_at, NOW()) ELSE mrsms_confirmed_at END,
-        canceled_at = CASE WHEN $2 = 'denied' THEN COALESCE(canceled_at, NOW()) ELSE canceled_at END,
+        decision_token_used_at = NOW(),
+        mrsms_confirmed_at = CASE WHEN $2 = 'mrsms_confirmed' THEN NOW() ELSE mrsms_confirmed_at END,
+        canceled_at = CASE WHEN $2 = 'denied' THEN NOW() ELSE canceled_at END,
         updated_at = NOW()
       WHERE mrsms_decision_token = $1
         AND request_type = 'intake'
-        AND canceled_at IS NULL
-        AND auto_cancelled_at IS NULL
+        AND status = 'new'
+        AND decision_token_used_at IS NULL
+        AND (decision_token_expires_at IS NULL OR decision_token_expires_at > NOW())
       RETURNING
         id,
         full_name AS "fullName",
@@ -1518,7 +1564,7 @@ router.post('/staff-decision/:token', async (request, response) => {
     );
     const row = result.rows[0];
     if (!row) {
-      response.status(404).json({ message: 'Appointment request could not be found or has already been closed.' });
+      response.status(409).json({ message: 'Appointment request could not be found, has already been reviewed, or this review link has expired.' });
       return;
     }
 
@@ -1618,18 +1664,23 @@ async function sendMrsmsUnconfirmedNotice(row: CancellationRow) {
   });
 }
 
-async function sendAutoCancellationNotice(row: CancellationRow) {
+async function sendAutoCancellationNotice(row: CancellationRow, paymentNeedsRefund: boolean) {
   if (!resend) return;
 
   await sendEmail({
     to: contactToEmail,
     replyTo: row.email || contactToEmail,
-    subject: 'M.R.S. Medical Services appointment auto-canceled',
+    subject: paymentNeedsRefund
+      ? 'M.R.S. Medical Services appointment auto-canceled - REFUND NEEDED'
+      : 'M.R.S. Medical Services appointment auto-canceled',
     title: 'Appointment auto-canceled',
     paragraphs: [
       `${row.fullName}'s appointment for ${getAppointmentLabel(row.preferredDate, row.preferredTimeWindow)} was automatically canceled because it was not confirmed before the 24-hour cutoff.`,
       `Phone: ${row.phone}`,
       `Email: ${row.email || 'Not provided'}`,
+      ...(paymentNeedsRefund
+        ? ['This appointment was already paid by card. Open the control center and issue a refund for this request.']
+        : []),
     ],
   });
 }
@@ -1654,11 +1705,10 @@ function getEasternDateKey(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export async function processAppointmentReminders() {
-  if (!hasDatabaseUrl() || !resend || !getConfiguredSiteOrigin()) return;
+const reminderJobLockKey = "hashtext('mrsms_appointment_reminders')::bigint";
 
-  await ensureDatabase();
-  const result = await pool.query<CancellationRow>(
+async function runReminderPass() {
+  const result = await pool.query<CancellationRow & { paymentStatus: string | null }>(
     `SELECT
       id,
       full_name AS "fullName",
@@ -1672,7 +1722,8 @@ export async function processAppointmentReminders() {
       patient_confirmed_at AS "patientConfirmedAt",
       reminder_two_day_sent_at AS "reminderTwoDaySentAt",
       reminder_one_day_sent_at AS "reminderOneDaySentAt",
-      auto_cancelled_at AS "autoCancelledAt"
+      auto_cancelled_at AS "autoCancelledAt",
+      payment_status AS "paymentStatus"
     FROM contact_requests
     WHERE request_type = 'intake'
       AND mrsms_confirmed_at IS NOT NULL
@@ -1691,29 +1742,103 @@ export async function processAppointmentReminders() {
     const dateKey = getDateKey(row.preferredDate);
 
     if (dateKey === twoDaysKey && !row.reminderTwoDaySentAt) {
-      await sendPatientConfirmationRequest(row, 'two-day');
-      await pool.query('UPDATE contact_requests SET reminder_two_day_sent_at = NOW(), updated_at = NOW() WHERE id = $1', [row.id]);
+      // Claim the row before sending so a crash or an overlapping run never
+      // sends the same reminder twice; the eligibility conditions are
+      // repeated here so a mid-pass confirmation or cancellation wins the race.
+      const claim = await pool.query(
+        `UPDATE contact_requests
+        SET reminder_two_day_sent_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+          AND request_type = 'intake'
+          AND mrsms_confirmed_at IS NOT NULL
+          AND patient_confirmed_at IS NULL
+          AND canceled_at IS NULL
+          AND auto_cancelled_at IS NULL
+          AND reminder_two_day_sent_at IS NULL
+        RETURNING id`,
+        [row.id],
+      );
+      if (claim.rowCount) {
+        await sendPatientConfirmationRequest(row, 'two-day');
+      }
       continue;
     }
 
     if (dateKey === oneDayKey && !row.reminderOneDaySentAt) {
-      await sendPatientConfirmationRequest(row, 'one-day');
-      await sendMrsmsUnconfirmedNotice(row);
-      await pool.query('UPDATE contact_requests SET reminder_one_day_sent_at = NOW(), unconfirmed_notice_sent_at = NOW(), updated_at = NOW() WHERE id = $1', [row.id]);
+      const claim = await pool.query(
+        `UPDATE contact_requests
+        SET reminder_one_day_sent_at = NOW(), unconfirmed_notice_sent_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+          AND request_type = 'intake'
+          AND mrsms_confirmed_at IS NOT NULL
+          AND patient_confirmed_at IS NULL
+          AND canceled_at IS NULL
+          AND auto_cancelled_at IS NULL
+          AND reminder_one_day_sent_at IS NULL
+        RETURNING id`,
+        [row.id],
+      );
+      if (claim.rowCount) {
+        await sendPatientConfirmationRequest(row, 'one-day');
+        await sendMrsmsUnconfirmedNotice(row);
+      }
       continue;
     }
 
     if (dateKey <= todayKey) {
-      await pool.query(
+      // A paid appointment is never silently marked unpaid here - it is
+      // flagged for a manual refund via the control center so the payment,
+      // appointment, and reservation records never disagree with each other.
+      const claim = await pool.query<{ paymentStatus: string | null }>(
         `UPDATE contact_requests
         SET status = 'cancelled',
           auto_cancelled_at = NOW(),
+          payment_review_status = CASE WHEN payment_status = 'paid' THEN 'refund_needed' ELSE payment_review_status END,
           updated_at = NOW()
-        WHERE id = $1`,
+        WHERE id = $1
+          AND request_type = 'intake'
+          AND mrsms_confirmed_at IS NOT NULL
+          AND patient_confirmed_at IS NULL
+          AND canceled_at IS NULL
+          AND auto_cancelled_at IS NULL
+        RETURNING payment_status AS "paymentStatus"`,
         [row.id],
       );
-      await sendAutoCancellationNotice(row);
+      if (claim.rowCount) {
+        await pool.query(
+          `UPDATE appointment_slot_reservations
+           SET status = 'cancelled', updated_at = NOW()
+           WHERE contact_request_id = $1 AND status <> 'cancelled'`,
+          [row.id],
+        );
+        await sendAutoCancellationNotice(row, claim.rows[0]?.paymentStatus === 'paid');
+      }
     }
+  }
+}
+
+export async function processAppointmentReminders() {
+  if (!hasDatabaseUrl() || !resend || !getConfiguredSiteOrigin()) return;
+
+  await ensureDatabase();
+
+  // Guard against two Railway instances (or overlapping deploys) running the
+  // job at the same time; the advisory lock is scoped to this connection, so
+  // a dedicated client is held for the duration of the pass.
+  const lockClient = await pool.connect();
+  try {
+    const lockResult = await lockClient.query<{ locked: boolean }>(
+      `SELECT pg_try_advisory_lock(${reminderJobLockKey}) AS locked`,
+    );
+    if (!lockResult.rows[0]?.locked) return;
+
+    try {
+      await runReminderPass();
+    } finally {
+      await lockClient.query(`SELECT pg_advisory_unlock(${reminderJobLockKey})`);
+    }
+  } finally {
+    lockClient.release();
   }
 }
 

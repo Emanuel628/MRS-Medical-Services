@@ -10,6 +10,11 @@ import availabilityRouter from './routes/availability.js';
 import healthRouter from './routes/health.js';
 import contactRouter, { startAppointmentReminderJob } from './routes/contact.js';
 
+if (process.env.NODE_ENV === 'production' && !process.env.SITE_ORIGIN) {
+  console.error('SITE_ORIGIN must be set in production so checkout URLs and emailed links never fall back to request headers. Refusing to start.');
+  process.exit(1);
+}
+
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 const __filename = fileURLToPath(import.meta.url);
@@ -55,11 +60,21 @@ app.use('/api', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 }));
+app.use('/api/contact/stripe-webhook', rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 app.use('/api/contact', rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 25,
   standardHeaders: true,
   legacyHeaders: false,
+  // Stripe retries and event bursts are authenticated by signature, not this
+  // limiter - give the webhook its own budget above instead of sharing the
+  // public contact-form limit.
+  skip: (req) => req.path === '/stripe-webhook',
 }));
 app.use('/api/admin', rateLimit({
   windowMs: 15 * 60 * 1000,

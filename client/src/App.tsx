@@ -52,11 +52,23 @@ const timeWindowOptions = [
 ];
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-type AdminRequest = {
+type AdminRequestSummary = {
   id: string;
   fullName: string;
   email: string | null;
   phone: string;
+  status: string;
+  requestType: string;
+  preferredDate: string | null;
+  preferredTimeWindow: string | null;
+  paymentMethod: string | null;
+  paymentStatus: string | null;
+  paymentReviewStatus: string | null;
+  quotedPriceCents: number | null;
+  createdAt: string;
+};
+
+type AdminRequestDetail = AdminRequestSummary & {
   message: string | null;
   patientName: string | null;
   appointmentFor: string | null;
@@ -73,16 +85,11 @@ type AdminRequest = {
   hasKit: boolean | null;
   patientCount: number | null;
   kitCount: number | null;
-  quotedPriceCents: number | null;
-  paymentMethod: string | null;
-  paymentStatus: string | null;
   stripeCheckoutSessionId: string | null;
-  status: string;
-  requestType: string;
+  refundedAt: string | null;
+  refundAmountCents: number | null;
   serviceArea: string | null;
-  preferredDate: string | null;
-  preferredTimeWindow: string | null;
-  createdAt: string;
+  updatedAt: string;
 };
 
 type Appointment = {
@@ -2558,7 +2565,15 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) 
 }
 
 function AdminPage() {
-  const [requests, setRequests] = useState<AdminRequest[]>([]);
+  const [requests, setRequests] = useState<AdminRequestSummary[]>([]);
+  const [requestsPage, setRequestsPage] = useState(1);
+  const [requestsPageSize] = useState(25);
+  const [requestsTotal, setRequestsTotal] = useState(0);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<AdminRequestDetail | null>(null);
+  const [detailStatus, setDetailStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [detailMessage, setDetailMessage] = useState('');
+  const [refundingId, setRefundingId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -2606,17 +2621,19 @@ function AdminPage() {
     setBlockedTimes(result.blockedTimes || []);
   };
 
-  const loadRequests = async () => {
+  const loadRequests = async (page = requestsPage) => {
     setStatus('loading');
     setStatusMessage('Loading control center...');
 
     try {
-      const response = await fetch('/api/admin/contact-requests', {
+      const response = await fetch(`/api/admin/contact-requests?page=${page}&pageSize=${requestsPageSize}`, {
         headers: getAdminHeaders(),
       });
       const result = (await response.json().catch(() => ({}))) as {
         message?: string;
-        requests?: AdminRequest[];
+        requests?: AdminRequestSummary[];
+        page?: number;
+        total?: number;
       };
 
       if (!response.ok) {
@@ -2624,12 +2641,72 @@ function AdminPage() {
       }
 
       setRequests(result.requests || []);
+      setRequestsPage(result.page || page);
+      setRequestsTotal(result.total || 0);
       await loadSchedule();
       setStatus('success');
       setStatusMessage('');
     } catch (error) {
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Control center could not be loaded.');
+    }
+  };
+
+  const openRequestDetail = async (id: string) => {
+    setSelectedRequestId(id);
+    setSelectedRequest(null);
+    setDetailStatus('loading');
+    setDetailMessage('');
+
+    try {
+      const response = await fetch(`/api/admin/contact-requests/${encodeURIComponent(id)}`, {
+        headers: getAdminHeaders(),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string; request?: AdminRequestDetail };
+
+      if (!response.ok || !result.request) {
+        throw new Error(result.message || 'This request could not be loaded.');
+      }
+
+      setSelectedRequest(result.request);
+      setDetailStatus('idle');
+    } catch (error) {
+      setDetailStatus('error');
+      setDetailMessage(error instanceof Error ? error.message : 'This request could not be loaded.');
+    }
+  };
+
+  const closeRequestDetail = () => {
+    setSelectedRequestId(null);
+    setSelectedRequest(null);
+    setDetailStatus('idle');
+    setDetailMessage('');
+  };
+
+  const handleRefund = async (id: string) => {
+    if (!window.confirm('Issue a full Stripe refund for this appointment and mark it cancelled?')) return;
+
+    setRefundingId(id);
+    try {
+      const response = await fetch(`/api/admin/contact-requests/${encodeURIComponent(id)}/refund`, {
+        method: 'POST',
+        headers: getAdminHeaders(),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Refund could not be completed right now.');
+      }
+
+      await loadRequests();
+      if (selectedRequestId === id) await openRequestDetail(id);
+      setStatus('success');
+      setStatusMessage(result.message || 'Refund issued.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Refund could not be completed right now.');
+    } finally {
+      setRefundingId(null);
     }
   };
 
@@ -2735,7 +2812,7 @@ function AdminPage() {
         preferredTimeWindow: '',
         message: '',
       });
-      await loadRequests();
+      await loadRequests(1);
       setStatus('success');
       setStatusMessage('Manual intake saved.');
     } catch (error) {
@@ -2847,50 +2924,130 @@ function AdminPage() {
           <section className="admin-panel admin-requests">
             <div className="admin-panel-header">
               <h2>Saved requests</h2>
-              <button className="btn secondary" type="button" onClick={() => void loadRequests()} disabled={!hasAdminSession}>
+              <button className="btn secondary" type="button" onClick={() => void loadRequests(1)} disabled={!hasAdminSession}>
                 Refresh
               </button>
             </div>
             {requests.length ? (
-              <div className="request-list">
-                {requests.map((request) => (
-                  <article key={request.id} className="request-item">
-                    <div className="request-heading">
-                      <strong>{request.fullName}</strong>
-                      <span>{request.requestType.replace('_', ' ')}</span>
-                    </div>
-                    <div className="request-detail-grid">
-                      <p><span>Contact</span>{request.phone}{request.email ? ` | ${request.email}` : ''}</p>
-                      <p><span>Patient</span>{request.patientName || request.fullName}</p>
-                      <p><span>Appointment for</span>{request.appointmentFor === 'other' ? 'Someone else' : 'Self'}</p>
-                      <p><span>Relationship</span>{request.relationshipToPatient || 'Not set'}</p>
-                      <p><span>Minor patient</span>{formatYesNo(request.patientIsMinor)}</p>
-                      <p><span>Guardian authorization</span>{request.patientIsMinor ? formatYesNo(request.guardianAuthorization) : 'Not applicable'}</p>
-                      <p><span>Address</span>{[
-                        request.streetAddress,
-                        request.addressDetails,
-                        request.town,
-                        request.state,
-                        request.zipCode,
-                      ].filter(Boolean).join(', ') || 'Address not set'}</p>
-                      <p><span>Service area</span>{request.serviceArea || 'Area not set'}</p>
-                      <p><span>Date / time</span>{request.preferredDate || 'Date not set'} | {request.preferredTimeWindow || 'Time not set'}</p>
-                      <p><span>Preferred lab</span>{request.preferredLab || 'Not specified'}</p>
-                      <p><span>Prescription ready</span>{formatYesNo(request.prescriptionReady)}</p>
-                      <p><span>Group size</span>{request.patientCount || 1} patient{(request.patientCount || 1) === 1 ? '' : 's'}</p>
-                      <p><span>Specialty kits</span>{request.hasKit ? `${request.kitCount || 1} kit${(request.kitCount || 1) === 1 ? '' : 's'}` : 'No'}</p>
-                      <p><span>Payment</span>{formatPaymentMethod(request.paymentMethod)} | {formatPaymentStatus(request.paymentStatus)}</p>
-                      <p><span>Quoted total</span>{formatCents(request.quotedPriceCents)}</p>
-                      <p><span>Stripe session</span>{request.stripeCheckoutSessionId || 'Not created'}</p>
-                    </div>
-                    <p className="request-notes">{request.message || 'No notes.'}</p>
-                  </article>
-                ))}
-              </div>
+              <>
+                <div className="request-list">
+                  {requests.map((request) => (
+                    <article key={request.id} className="request-item">
+                      <div className="request-heading">
+                        <strong>{request.fullName}</strong>
+                        <span>{request.requestType.replace('_', ' ')}</span>
+                      </div>
+                      <div className="request-detail-grid">
+                        <p><span>Contact</span>{request.phone}{request.email ? ` | ${request.email}` : ''}</p>
+                        <p><span>Date / time</span>{request.preferredDate || 'Date not set'} | {request.preferredTimeWindow || 'Time not set'}</p>
+                        <p><span>Status</span>{request.status.replace(/_/g, ' ')}</p>
+                        <p><span>Payment</span>{formatPaymentMethod(request.paymentMethod)} | {formatPaymentStatus(request.paymentStatus)}</p>
+                        <p><span>Quoted total</span>{formatCents(request.quotedPriceCents)}</p>
+                        {request.paymentReviewStatus && (
+                          <p><span>Payment review</span>{request.paymentReviewStatus.replace(/_/g, ' ')}</p>
+                        )}
+                      </div>
+                      <button className="btn secondary" type="button" onClick={() => void openRequestDetail(request.id)}>
+                        View full details
+                      </button>
+                    </article>
+                  ))}
+                </div>
+                <div className="admin-pagination">
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => void loadRequests(requestsPage - 1)}
+                    disabled={requestsPage <= 1 || status === 'loading'}
+                  >
+                    Previous
+                  </button>
+                  <span>
+                    Page {requestsPage} of {Math.max(1, Math.ceil(requestsTotal / requestsPageSize))} ({requestsTotal} total)
+                  </span>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => void loadRequests(requestsPage + 1)}
+                    disabled={requestsPage * requestsPageSize >= requestsTotal || status === 'loading'}
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
             ) : (
               <p className="admin-empty">No saved requests loaded.</p>
             )}
           </section>
+
+          {selectedRequestId && (
+            <div className="modal-backdrop" role="presentation" onClick={closeRequestDetail}>
+              <div
+                className="confirmation-modal admin-detail-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="request-detail-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2 id="request-detail-title">Request details</h2>
+                {detailStatus === 'loading' && <p>Loading...</p>}
+                {detailStatus === 'error' && (
+                  <p className="form-status form-status-error" role="status">{detailMessage}</p>
+                )}
+                {selectedRequest && (
+                  <>
+                    <div className="request-detail-grid">
+                      <p><span>Name</span>{selectedRequest.fullName}</p>
+                      <p><span>Contact</span>{selectedRequest.phone}{selectedRequest.email ? ` | ${selectedRequest.email}` : ''}</p>
+                      <p><span>Patient</span>{selectedRequest.patientName || selectedRequest.fullName}</p>
+                      <p><span>Appointment for</span>{selectedRequest.appointmentFor === 'other' ? 'Someone else' : 'Self'}</p>
+                      <p><span>Relationship</span>{selectedRequest.relationshipToPatient || 'Not set'}</p>
+                      <p><span>Minor patient</span>{formatYesNo(selectedRequest.patientIsMinor)}</p>
+                      <p><span>Guardian authorization</span>{selectedRequest.patientIsMinor ? formatYesNo(selectedRequest.guardianAuthorization) : 'Not applicable'}</p>
+                      <p><span>Address</span>{[
+                        selectedRequest.streetAddress,
+                        selectedRequest.addressDetails,
+                        selectedRequest.town,
+                        selectedRequest.state,
+                        selectedRequest.zipCode,
+                      ].filter(Boolean).join(', ') || 'Address not set'}</p>
+                      <p><span>Service area</span>{selectedRequest.serviceArea || 'Area not set'}</p>
+                      <p><span>Date / time</span>{selectedRequest.preferredDate || 'Date not set'} | {selectedRequest.preferredTimeWindow || 'Time not set'}</p>
+                      <p><span>Preferred lab</span>{selectedRequest.preferredLab || 'Not specified'}</p>
+                      <p><span>Prescription ready</span>{formatYesNo(selectedRequest.prescriptionReady)}</p>
+                      <p><span>Group size</span>{selectedRequest.patientCount || 1} patient{(selectedRequest.patientCount || 1) === 1 ? '' : 's'}</p>
+                      <p><span>Specialty kits</span>{selectedRequest.hasKit ? `${selectedRequest.kitCount || 1} kit${(selectedRequest.kitCount || 1) === 1 ? '' : 's'}` : 'No'}</p>
+                      <p><span>Payment</span>{formatPaymentMethod(selectedRequest.paymentMethod)} | {formatPaymentStatus(selectedRequest.paymentStatus)}</p>
+                      <p><span>Quoted total</span>{formatCents(selectedRequest.quotedPriceCents)}</p>
+                      <p><span>Stripe session</span>{selectedRequest.stripeCheckoutSessionId || 'Not created'}</p>
+                      {selectedRequest.refundedAt && (
+                        <p>
+                          <span>Refunded</span>
+                          {formatCents(selectedRequest.refundAmountCents)} on {new Date(selectedRequest.refundedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <p className="request-notes">{selectedRequest.message || 'No notes.'}</p>
+                    <div className="admin-detail-actions">
+                      {selectedRequest.paymentStatus === 'paid' && (
+                        <button
+                          className="btn danger"
+                          type="button"
+                          onClick={() => void handleRefund(selectedRequest.id)}
+                          disabled={refundingId === selectedRequest.id}
+                        >
+                          {refundingId === selectedRequest.id ? 'Processing refund...' : 'Cancel & Refund'}
+                        </button>
+                      )}
+                      <button className="btn secondary" type="button" onClick={closeRequestDetail}>
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           <form className="contact-form admin-panel" onSubmit={handleAppointment}>
             <h2>Set appointment</h2>

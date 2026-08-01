@@ -1498,6 +1498,34 @@ a {
   white-space: pre-wrap;
 }
 
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-detail-modal {
+  width: min(100%, 680px);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.admin-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.btn.danger {
+  background: #b70f1e;
+  color: var(--white);
+}
+
 .cta {
   padding: 34px 0;
   background: var(--navy-deep);
