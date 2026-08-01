@@ -42,6 +42,21 @@ const timeWindowOptions = [
   '12 PM - 1 PM',
   '1 PM - 2 PM',
 ];
+const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const monthOptions = [
+  ['01', 'January'],
+  ['02', 'February'],
+  ['03', 'March'],
+  ['04', 'April'],
+  ['05', 'May'],
+  ['06', 'June'],
+  ['07', 'July'],
+  ['08', 'August'],
+  ['09', 'September'],
+  ['10', 'October'],
+  ['11', 'November'],
+  ['12', 'December'],
+];
 
 type AdminRequest = {
   id: string;
@@ -86,6 +101,12 @@ type CancellationDetails = {
   status: string;
   canCancel: boolean;
   message?: string;
+};
+
+type DateParts = {
+  year: string;
+  month: string;
+  day: string;
 };
 
 const steps = [
@@ -618,7 +639,12 @@ function IntakePage() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showServiceAreaNotice, setShowServiceAreaNotice] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
-  const rollingDates = getRollingVisitDates(new Date(), 30);
+  const [dobDraft, setDobDraft] = useState<DateParts>({ year: '', month: '', day: '' });
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
+  const todayKey = getLocalDateKey(new Date());
+  const calendarDays = getCalendarDays(visibleMonth);
+  const dobYears = getDobYears(new Date(), 120);
+  const dobDays = getDaysInMonth(dobDraft.year, dobDraft.month);
   const selectedBlockedWindows = new Set(
     blockedTimes
       .filter((blocked) => getScheduleDateKey(blocked.blockDate) === form.requestedDate)
@@ -645,6 +671,12 @@ function IntakePage() {
       setForm((currentForm) => ({ ...currentForm, preferredTimeWindow: '' }));
     }
   }, [form.hasKit, form.preferredTimeWindow]);
+
+  const updateDobPart = (part: keyof DateParts, value: string) => {
+    const nextDraft = normalizeDateParts({ ...dobDraft, [part]: value });
+    setDobDraft(nextDraft);
+    setForm({ ...form, dateOfBirth: buildDateValue(nextDraft.year, nextDraft.month, nextDraft.day) });
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -764,12 +796,41 @@ function IntakePage() {
               </label>
               <label>
                 Date of birth
-                <input
-                  type="date"
-                  value={form.dateOfBirth}
-                  onChange={(event) => setForm({ ...form, dateOfBirth: event.target.value })}
-                  required
-                />
+                <div className="dob-rolodex" role="group" aria-label="Date of birth">
+                  <select
+                    aria-label="Birth month"
+                    value={dobDraft.month}
+                    onChange={(event) => updateDobPart('month', event.target.value)}
+                    required
+                  >
+                    <option value="">Month</option>
+                    {monthOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Birth day"
+                    value={dobDraft.day}
+                    onChange={(event) => updateDobPart('day', event.target.value)}
+                    required
+                  >
+                    <option value="">Day</option>
+                    {dobDays.map((day) => (
+                      <option key={day} value={day}>{Number(day)}</option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Birth year"
+                    value={dobDraft.year}
+                    onChange={(event) => updateDobPart('year', event.target.value)}
+                    required
+                  >
+                    <option value="">Year</option>
+                    {dobYears.map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
               </label>
               <label>
                 Phone
@@ -863,28 +924,56 @@ function IntakePage() {
             </div>
 
             <div className="booking-calendar" aria-label="Visit availability picker">
-              <div className="rolling-picker-header">
+              <div className="calendar-header">
+                <button
+                  className="calendar-nav"
+                  type="button"
+                  onClick={() => setVisibleMonth(addMonths(visibleMonth, -1))}
+                  disabled={getMonthKey(visibleMonth) <= getMonthKey(startOfMonth(new Date()))}
+                  aria-label="Previous month"
+                >
+                  ‹
+                </button>
                 <div>
-                  <strong>Choose a visit date</strong>
+                  <strong>{visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</strong>
                   <span>{selectedDateLabel}</span>
                 </div>
-                <small>Monday-Friday only</small>
+                <button
+                  className="calendar-nav"
+                  type="button"
+                  onClick={() => setVisibleMonth(addMonths(visibleMonth, 1))}
+                  aria-label="Next month"
+                >
+                  ›
+                </button>
               </div>
 
-              <div className="date-rolodex" aria-label="Available weekdays">
-                {rollingDates.map((date) => {
+              <div className="calendar-weekdays" aria-hidden="true">
+                {weekdayLabels.map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+
+              <div className="calendar-grid">
+                {calendarDays.map((date, index) => {
+                  if (!date) {
+                    return <span key={`empty-${index}`} className="calendar-day-empty" aria-hidden="true" />;
+                  }
+
                   const dateKey = getLocalDateKey(date);
                   const blockedForDate = unavailableByDate[dateKey] || new Set<string>();
                   const unavailableForDate = getUnavailableWindows(blockedForDate, form.hasKit);
+                  const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
+                  const isPast = dateKey < todayKey;
                   const isFull = timeWindowOptions.every((window) => unavailableForDate.has(window));
-                  const openCount = timeWindowOptions.length - unavailableForDate.size;
+                  const isDisabled = !isCurrentMonth || isPast || isFull;
 
                   return (
                     <button
                       key={dateKey}
-                      className={`date-option ${form.requestedDate === dateKey ? 'selected' : ''}`}
+                      className={`calendar-day ${form.requestedDate === dateKey ? 'selected' : ''}`}
                       type="button"
-                      disabled={isFull}
+                      disabled={isDisabled}
                       onClick={() => {
                         setForm({
                           ...form,
@@ -895,9 +984,10 @@ function IntakePage() {
                         });
                       }}
                     >
-                      <span>{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
-                      <strong>{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</strong>
-                      <small>{isFull ? 'Full' : `${openCount} open`}</small>
+                      <span>{date.getDate()}</span>
+                      {isCurrentMonth && !isPast && (
+                        <small>{isFull ? 'Full' : `${timeWindowOptions.length - unavailableForDate.size} open`}</small>
+                      )}
                     </button>
                   );
                 })}
@@ -1581,6 +1671,26 @@ function formatScheduleDate(value: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function getCalendarDays(monthDate: Date): Array<Date | null> {
+  const firstDay = startOfMonth(monthDate);
+  const days: Array<Date | null> = Array.from({ length: Math.max(firstDay.getDay() - 1, 0) }, () => null);
+  const cursor = new Date(firstDay);
+
+  while (cursor.getMonth() === monthDate.getMonth()) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) {
+      days.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  while (days.length % 5 !== 0) {
+    days.push(null);
+  }
+
+  return days;
+}
+
 function getTimeWindowStartHour(value: string) {
   const match = value.match(/^(\d+)\s(AM|PM)/);
   if (!match) return 0;
@@ -1600,19 +1710,45 @@ function getUnavailableWindows(blockedWindows: Set<string>, hasKit: boolean) {
   );
 }
 
-function getRollingVisitDates(startDate: Date, count: number) {
-  const dates: Date[] = [];
-  const cursor = new Date(startDate);
+function startOfMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), 1);
+}
 
-  while (dates.length < count) {
-    const day = cursor.getDay();
-    if (day !== 0 && day !== 6) {
-      dates.push(new Date(cursor));
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
+function addMonths(value: Date, amount: number) {
+  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
+}
 
-  return dates;
+function getMonthKey(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getDobYears(today: Date, span: number) {
+  const latestYear = today.getFullYear() - 19;
+  return Array.from({ length: span }, (_, index) => String(latestYear - index));
+}
+
+function getDaysInMonth(year: string, month: string) {
+  const fallbackMonth = Number(month) || 1;
+  const fallbackYear = Number(year) || new Date().getFullYear() - 19;
+  const days = new Date(fallbackYear, fallbackMonth, 0).getDate();
+  return Array.from({ length: days }, (_, index) => String(index + 1).padStart(2, '0'));
+}
+
+function normalizeDateParts(parts: DateParts): DateParts {
+  if (!parts.day) return parts;
+
+  const daysInMonth = getDaysInMonth(parts.year, parts.month);
+  if (daysInMonth.includes(parts.day)) return parts;
+
+  return { ...parts, day: daysInMonth[daysInMonth.length - 1] };
+}
+
+function buildDateValue(year: string, month: string, day: string) {
+  if (!year || !month || !day) return '';
+
+  const daysInMonth = getDaysInMonth(year, month);
+  const safeDay = daysInMonth.includes(day) ? day : daysInMonth[daysInMonth.length - 1];
+  return `${year}-${month}-${safeDay}`;
 }
 
 function isAdultPatient(dateOfBirth: string) {
