@@ -6,6 +6,7 @@ export type VisitPricingInput = {
   isWeekendOrHoliday?: boolean;
   patientCount?: number;
   additionalPatientFeeCents?: number;
+  kitCount?: number;
 };
 
 export type IntakePricingInput = {
@@ -13,6 +14,7 @@ export type IntakePricingInput = {
   appointmentDate?: string | Date | null;
   timeWindow?: string | null;
   patientCount?: number;
+  kitCount?: number;
 };
 
 export type VisitPriceQuote = {
@@ -31,7 +33,8 @@ const travelTiers = [
 const statRushFeeCents = 2500;
 const weekendHolidayFeeCents = 2500;
 const earlyMorningOrEveningFeeCents = 2500;
-const defaultAdditionalPatientFeeCents = 3500;
+const perPatientFeeCents = 9000;
+const specialtyKitFeeCents = 2000;
 const zipCentroids: Record<string, { lat: number; lng: number }> = {
   '08087': { lat: 39.60, lng: -74.35 },
   '077': { lat: 40.35, lng: -74.08 },
@@ -93,20 +96,12 @@ function getDistanceMiles(from: { lat: number; lng: number }, to: { lat: number;
 }
 
 export function calculateVisitPrice(input: VisitPricingInput): VisitPriceQuote {
-  const oneWayTravelMinutes = cleanNumber(input.oneWayTravelMinutes);
-  const baseFeeCents = getTravelBaseFee(oneWayTravelMinutes);
-  const lineItems: VisitPriceQuote['lineItems'] = [{ code: 'travel_base', amountCents: baseFeeCents }];
-
-  if (baseFeeCents === null) {
-    return { status: 'custom_quote', totalCents: null, lineItems };
-  }
-
   const startHour = getTimeWindowStartHour(input.timeWindow);
   const patientCount = Math.max(1, Math.floor(cleanNumber(input.patientCount) || 1));
-  const additionalPatientFee = Math.max(
-    0,
-    Math.floor(cleanNumber(input.additionalPatientFeeCents) || defaultAdditionalPatientFeeCents),
-  );
+  const kitCount = Math.max(0, Math.floor(cleanNumber(input.kitCount) || 0));
+  const lineItems: VisitPriceQuote['lineItems'] = [
+    { code: 'patients', amountCents: patientCount * perPatientFeeCents },
+  ];
 
   if (input.isStatOrRush) lineItems.push({ code: 'stat_rush', amountCents: statRushFeeCents });
   if (input.isWeekendOrHoliday || isWeekend(input.appointmentDate)) {
@@ -115,8 +110,8 @@ export function calculateVisitPrice(input: VisitPricingInput): VisitPriceQuote {
   if (startHour !== null && (startHour < 6 || startHour >= 19)) {
     lineItems.push({ code: 'early_morning_evening', amountCents: earlyMorningOrEveningFeeCents });
   }
-  if (patientCount > 1) {
-    lineItems.push({ code: 'additional_patients', amountCents: (patientCount - 1) * additionalPatientFee });
+  if (kitCount > 0) {
+    lineItems.push({ code: 'specialty_kits', amountCents: kitCount * specialtyKitFeeCents });
   }
 
   return {
@@ -143,5 +138,6 @@ export function calculateIntakeVisitPrice(input: IntakePricingInput) {
     appointmentDate: input.appointmentDate,
     timeWindow: input.timeWindow,
     patientCount: input.patientCount,
+    kitCount: input.kitCount,
   });
 }

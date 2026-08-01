@@ -540,6 +540,12 @@ a {
   gap: 16px;
 }
 
+.contact-form h2 {
+  margin: 0;
+  color: var(--navy-deep);
+  font: 700 28px / 1.1 Georgia, 'Times New Roman', serif;
+}
+
 .contact-form label {
   display: grid;
   gap: 7px;
@@ -662,6 +668,10 @@ a {
   display: grid;
   gap: 16px;
   min-width: 0;
+}
+
+.intake-panel.full-span {
+  grid-column: 1 / -1;
 }
 
 .intake-panel h2 {

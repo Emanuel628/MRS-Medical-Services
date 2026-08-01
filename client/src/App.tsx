@@ -187,21 +187,16 @@ function estimateOneWayTravelMinutes(zipCode: string) {
   return Math.ceil(miles * 1.55 + 8);
 }
 
-function calculateIntakeTotal(zipCode: string, requestedDate: string, timeWindow: string, patientCount: number) {
-  const travelMinutes = estimateOneWayTravelMinutes(zipCode);
-  if (!travelMinutes) return null;
-
-  const baseFee = travelMinutes <= 60 ? 90 : travelMinutes <= 90 ? 125 : travelMinutes <= 120 ? 150 : travelMinutes <= 150 ? 175 : null;
-  if (baseFee === null) return null;
-
+function calculateIntakeTotal(requestedDate: string, timeWindow: string, patientCount: number, kitCount: number) {
   const date = requestedDate ? new Date(`${requestedDate}T12:00:00`) : null;
   const day = date && !Number.isNaN(date.getTime()) ? date.getDay() : null;
   const startHour = getTimeWindowStartHour(timeWindow);
   const weekendFee = day === 0 || day === 6 ? 25 : 0;
   const earlyOrEveningFee = startHour !== null && (startHour < 6 || startHour >= 19) ? 25 : 0;
-  const additionalPatientsFee = Math.max(0, patientCount - 1) * 35;
+  const patientsFee = Math.max(1, patientCount) * 90;
+  const kitFee = Math.max(0, kitCount) * 20;
 
-  return baseFee + weekendFee + earlyOrEveningFee + additionalPatientsFee;
+  return patientsFee + kitFee + weekendFee + earlyOrEveningFee;
 }
 
 function formatCurrency(value: number | null) {
@@ -516,28 +511,6 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         </div>
       </section>
 
-      <section className="section muted">
-        <div className="wrap info-grid">
-          <article>
-            <span className="eyebrow">Payment</span>
-            <h2>Payment options are expanding.</h2>
-            <p>
-              Visit cost is calculated from the appointment details before checkout or on-site payment.
-            </p>
-            <p>Insurance payment is planned for a later phase after the required approvals are in place.</p>
-          </article>
-          <article>
-            <span className="eyebrow">Requirements</span>
-            <h2>Prescription required.</h2>
-            <p>
-              A prescription, lab order, or provider request is required before a blood draw can be
-              completed.
-            </p>
-            <p>Appointments require 24-hour notice for cancellation.</p>
-          </article>
-        </div>
-      </section>
-
       <section className="section">
         <div className="wrap services-layout">
           <div className="section-title">
@@ -550,6 +523,40 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
               <li key={lab}>{lab}</li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      <section className="section muted">
+        <div className="wrap info-grid">
+          <article>
+            <span className="eyebrow">Requirements</span>
+            <h2>Prescription required.</h2>
+            <p>
+              A prescription, lab order, or provider request is required before a blood draw can be
+              completed.
+            </p>
+            <p>Appointments require 24-hour notice for cancellation.</p>
+          </article>
+          <article>
+            <span className="eyebrow">Payment</span>
+            <h2>Payment options are expanding.</h2>
+            <p>
+              Visit cost is calculated from the appointment details before checkout or on-site payment.
+            </p>
+            <p>Insurance payment is planned for a later phase after the required approvals are in place.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="cta">
+        <div className="wrap cta-inner">
+          <div>
+            <h3>Ready to schedule a mobile blood draw?</h3>
+            <p>Use the appointment page to share the visit details and choose a payment option.</p>
+          </div>
+          <button className="btn teal" type="button" onClick={() => onNavigate('intake')}>
+            Request a Visit
+          </button>
         </div>
       </section>
 
@@ -692,6 +699,7 @@ function ContactPage() {
       <section className="section">
         <div className="wrap contact-layout">
           <form className="contact-form" onSubmit={handleSubmit}>
+            <h2>Send a message</h2>
             <label>
               Name
               <input
@@ -775,6 +783,7 @@ function IntakePage() {
     patientCount: '1',
     prescriptionReady: false,
     hasKit: false,
+    kitCount: '1',
     paymentMethod: 'card',
     insuranceProvider: '',
     insuranceMemberId: '',
@@ -799,7 +808,8 @@ function IntakePage() {
   );
   const selectedUnavailableWindows = getUnavailableWindows(selectedBlockedWindows, form.hasKit);
   const effectivePatientCount = form.isGroup ? Math.max(2, Math.floor(Number(form.patientCount) || 2)) : 1;
-  const cardTotal = calculateIntakeTotal(form.zipCode, form.requestedDate, form.preferredTimeWindow, effectivePatientCount);
+  const effectiveKitCount = form.hasKit ? Math.max(1, Math.floor(Number(form.kitCount) || 1)) : 0;
+  const cardTotal = calculateIntakeTotal(form.requestedDate, form.preferredTimeWindow, effectivePatientCount, effectiveKitCount);
   const missingDate = attemptedSubmit && !form.requestedDate;
   const missingTime = attemptedSubmit && !form.preferredTimeWindow;
   const missingInsurance = attemptedSubmit && form.paymentMethod === 'insurance' &&
@@ -967,6 +977,7 @@ function IntakePage() {
       `Number of people: ${effectivePatientCount}`,
       `Prescription/order ready: ${form.prescriptionReady ? 'Yes' : 'No'}`,
       `Has kit: ${form.hasKit ? 'Yes' : 'No'}`,
+      `Number of specialty kits: ${form.hasKit ? effectiveKitCount : 'Not applicable'}`,
       `Payment method: ${form.paymentMethod === 'insurance' ? 'Insurance' : form.paymentMethod === 'pay_at_site' ? 'Pay at site' : 'Card checkout'}`,
       `Terms accepted: ${form.termsAccepted ? 'Yes' : 'No'}`,
       ...(form.paymentMethod === 'insurance'
@@ -1003,6 +1014,7 @@ function IntakePage() {
           preferredLab: form.preferredLab,
           prescriptionReady: form.prescriptionReady,
           patientCount: effectivePatientCount,
+          kitCount: effectiveKitCount,
           paymentMethod: form.paymentMethod,
           insuranceProvider: form.insuranceProvider,
           insuranceMemberId: form.insuranceMemberId,
@@ -1068,331 +1080,9 @@ function IntakePage() {
             onInvalid={() => setAttemptedSubmit(true)}
           >
             <div className="intake-columns">
-              <section className="intake-panel" aria-labelledby="patient-info-title">
-                <h2 id="patient-info-title">Scheduling contact</h2>
-            <div className="form-grid">
-              <label>
-                Contact full name
-                <input
-                  value={form.fullName}
-                  onChange={(event) => setForm({ ...form, fullName: event.target.value })}
-                  autoComplete="name"
-                  required
-                />
-              </label>
-              <label>
-                Phone
-                <input
-                  value={form.phone}
-                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                  autoComplete="tel"
-                  required
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => setForm({ ...form, email: event.target.value })}
-                  autoComplete="email"
-                  required
-                />
-              </label>
-              <label>
-                Who is this appointment for?
-                <select
-                  value={form.appointmentFor}
-                  onChange={(event) => setForm({
-                    ...form,
-                    appointmentFor: event.target.value,
-                    patientName: event.target.value === 'self' ? '' : form.patientName,
-                    relationshipToPatient: event.target.value === 'self' ? '' : form.relationshipToPatient,
-                  })}
-                  required
-                >
-                  <option value="self">Myself</option>
-                  <option value="someone_else">Someone else</option>
-                </select>
-              </label>
-              {isSchedulingForSomeoneElse && (
-                <>
-                  <label>
-                    Patient full name
-                    <input
-                      value={form.patientName}
-                      onChange={(event) => setForm({ ...form, patientName: event.target.value })}
-                      required
-                    />
-                  </label>
-                  <label>
-                    Relationship to patient
-                    <input
-                      value={form.relationshipToPatient}
-                      onChange={(event) => setForm({ ...form, relationshipToPatient: event.target.value })}
-                      placeholder="Parent, guardian, caregiver, spouse, or other authorized contact."
-                      required
-                    />
-                  </label>
-                </>
-              )}
-            </div>
-
-            <div className="checkbox-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={form.patientIsMinor}
-                  onChange={(event) => setForm({
-                    ...form,
-                    patientIsMinor: event.target.checked,
-                    guardianAuthorization: event.target.checked ? form.guardianAuthorization : false,
-                  })}
-                />
-                The patient is under 18.
-              </label>
-              {form.patientIsMinor && (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={form.guardianAuthorization}
-                    onChange={(event) => setForm({ ...form, guardianAuthorization: event.target.checked })}
-                    required
-                  />
-                  I am the parent or legal guardian, or I am authorized by the parent or legal guardian to schedule this visit.
-                </label>
-              )}
-            </div>
-
-            <div className="form-grid">
-              <label>
-                Street address
-                <input
-                  value={form.streetAddress}
-                  onChange={(event) => setForm({ ...form, streetAddress: event.target.value })}
-                  autoComplete="address-line1"
-                  placeholder="Home, job, office, facility, or approved care setting."
-                  required
-                />
-              </label>
-              <label>
-                Address details
-                <input
-                  value={form.addressDetails}
-                  onChange={(event) => setForm({ ...form, addressDetails: event.target.value })}
-                  autoComplete="address-line2"
-                  placeholder="Apartment, gate number, floor, parking, or entry notes."
-                />
-              </label>
-              <label>
-                Town / city
-                <input
-                  value={form.town}
-                  onChange={(event) => setForm({ ...form, town: event.target.value })}
-                  autoComplete="address-level2"
-                  required
-                />
-              </label>
-              <label>
-                State
-                <input
-                  value={form.state}
-                  onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase().slice(0, 2) })}
-                  autoComplete="address-level1"
-                  required
-                />
-              </label>
-              <label>
-                ZIP code
-                <input
-                  value={form.zipCode}
-                  onChange={(event) => setForm({ ...form, zipCode: event.target.value.replace(/[^\d-]/g, '').slice(0, 10) })}
-                  autoComplete="postal-code"
-                  inputMode="numeric"
-                  required
-                />
-              </label>
-              <div className="group-request-block">
-                <label className="checkbox-field">
-                  <input
-                    type="checkbox"
-                    checked={form.isGroup}
-                    onChange={(event) => setForm({
-                      ...form,
-                      isGroup: event.target.checked,
-                      patientCount: event.target.checked ? String(Math.max(2, Number(form.patientCount) || 2)) : '1',
-                    })}
-                  />
-                  <span>Groups:</span>
-                  {' '}
-                  <small>For more than 1 patient.</small>
-                </label>
-                {form.isGroup && (
-                  <>
-                    <label>
-                      Number of people
-                      <input
-                        type="number"
-                        min={2}
-                        value={form.patientCount}
-                        onFocus={(event) => event.currentTarget.select()}
-                        onChange={(event) => setForm({ ...form, patientCount: event.target.value.replace(/\D/g, '') })}
-                        onBlur={() => setForm((currentForm) => ({
-                          ...currentForm,
-                          patientCount: String(Math.max(2, Number(currentForm.patientCount) || 2)),
-                        }))}
-                        required
-                      />
-                    </label>
-                    <p className="field-help group-help">Additional group member information will be collected on site.</p>
-                  </>
-                )}
-              </div>
-              <label>
-                Preferred lab
-                <select
-                  value={form.preferredLab}
-                  onChange={(event) => setForm({ ...form, preferredLab: event.target.value })}
-                >
-                  <option value="">Select if known</option>
-                  {labOptions.map((lab) => (
-                    <option key={lab} value={lab}>{lab}</option>
-                  ))}
-                  <option value="Other">Other / not sure</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="checkbox-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={form.prescriptionReady}
-                  onChange={(event) => setForm({ ...form, prescriptionReady: event.target.checked })}
-                />
-                I have a prescription, lab order, or provider instructions.
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={form.hasKit}
-                  onChange={(event) => setForm({ ...form, hasKit: event.target.checked })}
-                />
-                I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
-              </label>
-            </div>
-
-            <fieldset className="payment-methods">
-              <legend>Payment method</legend>
-              <div className="payment-method-grid">
-                <div className="payment-option-list">
-                  <label>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="card"
-                      checked={form.paymentMethod === 'card'}
-                      onChange={() => setForm({ ...form, paymentMethod: 'card' })}
-                    />
-                    <span>Secure card checkout</span>
-                  </label>
-                  <label className="insurance-option-hidden">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="insurance"
-                      checked={form.paymentMethod === 'insurance'}
-                      onChange={() => setForm({ ...form, paymentMethod: 'insurance' })}
-                    />
-                    <span>Paid by insurance</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="pay_at_site"
-                      checked={form.paymentMethod === 'pay_at_site'}
-                      onChange={() => setForm({ ...form, paymentMethod: 'pay_at_site' })}
-                    />
-                    <span>Pay at site</span>
-                  </label>
-                </div>
-                {form.paymentMethod === 'card' && (
-                  <div className="checkout-total" aria-live="polite">
-                    <span>Checkout total</span>
-                    <strong>{formatCurrency(cardTotal)}</strong>
-                    <small>Based on the service ZIP code and selected visit details.</small>
-                  </div>
-                )}
-              </div>
-              {form.paymentMethod === 'pay_at_site' && (
-                <p className="payment-warning">Checks and Venmo are <strong>NOT</strong> accepted. On-site payment is processed through Square only.</p>
-              )}
-            </fieldset>
-
-            <label className={`checkbox-field terms-acknowledgement ${missingTerms ? 'field-invalid' : ''}`}>
-              <input
-                type="checkbox"
-                checked={form.termsAccepted}
-                onChange={(event) => setForm({ ...form, termsAccepted: event.target.checked })}
-                required
-              />
-              <span>
-                I agree to the <a href="/terms">Terms &amp; Conditions</a> and{' '}
-                <a href="/privacy">Privacy Policy</a>, and authorize M.R.S. Medical Services to use my submitted
-                information to process this visit request and payment.
-              </span>
-            </label>
-
-            {form.paymentMethod === 'insurance' && (
-              <div className={`form-grid insurance-fields ${missingInsurance ? 'field-invalid' : ''}`}>
-                <label>
-                  Insurance provider
-                  <input
-                    value={form.insuranceProvider}
-                    onChange={(event) => setForm({ ...form, insuranceProvider: event.target.value })}
-                    required
-                  />
-                </label>
-                <label>
-                  Member ID
-                  <input
-                    value={form.insuranceMemberId}
-                    onChange={(event) => setForm({ ...form, insuranceMemberId: event.target.value })}
-                    required
-                  />
-                </label>
-                <label>
-                  Group number
-                  <input
-                    value={form.insuranceGroupNumber}
-                    onChange={(event) => setForm({ ...form, insuranceGroupNumber: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Policyholder name
-                  <input
-                    value={form.policyholderName}
-                    onChange={(event) => setForm({ ...form, policyholderName: event.target.value })}
-                    required
-                  />
-                </label>
-              </div>
-            )}
-
-            <button className="btn primary" type="submit" disabled={status === 'sending'}>
-              {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Appointment'}
-            </button>
-            {statusMessage && (
-              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
-                {statusMessage}
-              </p>
-            )}
-              </section>
-
-              <section className="intake-panel appointment-panel" aria-labelledby="appointment-info-title">
-                <h2 id="appointment-info-title">Appointment info</h2>
-            <div className={`booking-calendar ${missingDate || missingTime ? 'field-invalid' : ''}`} aria-label="Visit availability picker">
+              <section className="intake-panel appointment-panel full-span" aria-labelledby="appointment-info-title">
+                <h2 id="appointment-info-title">Appointment</h2>
+                <div className={`booking-calendar ${missingDate || missingTime ? 'field-invalid' : ''}`} aria-label="Visit availability picker">
               <div className="calendar-header">
                 <button
                   className="calendar-nav"
@@ -1488,6 +1178,252 @@ function IntakePage() {
                 </div>
               </div>
             </div>
+              </section>
+
+              <section className="intake-panel" aria-labelledby="patient-info-title">
+                <h2 id="patient-info-title">Scheduling contact</h2>
+                <div className="form-grid">
+                  <label>
+                    Contact full name
+                    <input
+                      value={form.fullName}
+                      onChange={(event) => setForm({ ...form, fullName: event.target.value })}
+                      autoComplete="name"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Phone
+                    <input
+                      value={form.phone}
+                      onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                      autoComplete="tel"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Email
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(event) => setForm({ ...form, email: event.target.value })}
+                      autoComplete="email"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Who is this appointment for?
+                    <select
+                      value={form.appointmentFor}
+                      onChange={(event) => setForm({
+                        ...form,
+                        appointmentFor: event.target.value,
+                        patientName: event.target.value === 'self' ? '' : form.patientName,
+                        relationshipToPatient: event.target.value === 'self' ? '' : form.relationshipToPatient,
+                      })}
+                      required
+                    >
+                      <option value="self">Myself</option>
+                      <option value="someone_else">Someone else</option>
+                    </select>
+                  </label>
+                  {isSchedulingForSomeoneElse && (
+                    <>
+                      <label>
+                        Patient full name
+                        <input
+                          value={form.patientName}
+                          onChange={(event) => setForm({ ...form, patientName: event.target.value })}
+                          required
+                        />
+                      </label>
+                      <label>
+                        Relationship to patient
+                        <input
+                          value={form.relationshipToPatient}
+                          onChange={(event) => setForm({ ...form, relationshipToPatient: event.target.value })}
+                          placeholder="Parent, guardian, caregiver, spouse, or other authorized contact."
+                          required
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+
+                <div className="checkbox-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={form.patientIsMinor}
+                      onChange={(event) => setForm({
+                        ...form,
+                        patientIsMinor: event.target.checked,
+                        guardianAuthorization: event.target.checked ? form.guardianAuthorization : false,
+                      })}
+                    />
+                    The patient is under 18.
+                  </label>
+                  {form.patientIsMinor && (
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={form.guardianAuthorization}
+                        onChange={(event) => setForm({ ...form, guardianAuthorization: event.target.checked })}
+                        required
+                      />
+                      I am the parent or legal guardian, or I am authorized by the parent or legal guardian to schedule this visit.
+                    </label>
+                  )}
+                </div>
+              </section>
+
+              <section className="intake-panel" aria-labelledby="service-location-title">
+                <h2 id="service-location-title">Service location</h2>
+                <div className="form-grid">
+                  <label>
+                    Street address
+                    <input
+                      value={form.streetAddress}
+                      onChange={(event) => setForm({ ...form, streetAddress: event.target.value })}
+                      autoComplete="address-line1"
+                      placeholder="Home, job, office, facility, or approved care setting."
+                      required
+                    />
+                  </label>
+                  <label>
+                    Address details
+                    <input
+                      value={form.addressDetails}
+                      onChange={(event) => setForm({ ...form, addressDetails: event.target.value })}
+                      autoComplete="address-line2"
+                      placeholder="Apartment, gate number, floor, parking, or entry notes."
+                    />
+                  </label>
+                  <label>
+                    Town / city
+                    <input
+                      value={form.town}
+                      onChange={(event) => setForm({ ...form, town: event.target.value })}
+                      autoComplete="address-level2"
+                      required
+                    />
+                  </label>
+                  <label>
+                    State
+                    <input
+                      value={form.state}
+                      onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase().slice(0, 2) })}
+                      autoComplete="address-level1"
+                      required
+                    />
+                  </label>
+                  <label>
+                    ZIP code
+                    <input
+                      value={form.zipCode}
+                      onChange={(event) => setForm({ ...form, zipCode: event.target.value.replace(/[^\d-]/g, '').slice(0, 10) })}
+                      autoComplete="postal-code"
+                      inputMode="numeric"
+                      required
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="intake-panel" aria-labelledby="collection-details-title">
+                <h2 id="collection-details-title">Collection details</h2>
+                <div className="form-grid">
+                  <div className="group-request-block">
+                    <label className="checkbox-field">
+                      <input
+                        type="checkbox"
+                        checked={form.isGroup}
+                        onChange={(event) => setForm({
+                          ...form,
+                          isGroup: event.target.checked,
+                          patientCount: event.target.checked ? String(Math.max(2, Number(form.patientCount) || 2)) : '1',
+                        })}
+                      />
+                      <span>Groups:</span>
+                      {' '}
+                      <small>For more than 1 patient.</small>
+                    </label>
+                    {form.isGroup && (
+                      <>
+                        <label>
+                          Number of people
+                          <input
+                            type="number"
+                            min={2}
+                            value={form.patientCount}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onChange={(event) => setForm({ ...form, patientCount: event.target.value.replace(/\D/g, '') })}
+                            onBlur={() => setForm((currentForm) => ({
+                              ...currentForm,
+                              patientCount: String(Math.max(2, Number(currentForm.patientCount) || 2)),
+                            }))}
+                            required
+                          />
+                        </label>
+                        <p className="field-help group-help">Additional group member information will be collected on site.</p>
+                      </>
+                    )}
+                  </div>
+                  <label>
+                    Preferred lab
+                    <select
+                      value={form.preferredLab}
+                      onChange={(event) => setForm({ ...form, preferredLab: event.target.value })}
+                    >
+                      <option value="">Select if known</option>
+                      {labOptions.map((lab) => (
+                        <option key={lab} value={lab}>{lab}</option>
+                      ))}
+                      <option value="Other">Other / not sure</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="checkbox-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={form.prescriptionReady}
+                      onChange={(event) => setForm({ ...form, prescriptionReady: event.target.checked })}
+                    />
+                    I have a prescription, lab order, or provider instructions.
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={form.hasKit}
+                      onChange={(event) => setForm({
+                        ...form,
+                        hasKit: event.target.checked,
+                        kitCount: event.target.checked ? String(Math.max(1, Number(form.kitCount) || 1)) : '1',
+                      })}
+                    />
+                    I have a specialty collection kit. I understand kit collections must be scheduled before 10 AM.
+                  </label>
+                </div>
+
+                {form.hasKit && (
+                  <label>
+                    Number of specialty kits
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.kitCount}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onChange={(event) => setForm({ ...form, kitCount: event.target.value.replace(/\D/g, '') })}
+                      onBlur={() => setForm((currentForm) => ({
+                        ...currentForm,
+                        kitCount: String(Math.max(1, Number(currentForm.kitCount) || 1)),
+                      }))}
+                      required
+                    />
+                  </label>
+                )}
 
             <label>
               Collection accommodations or visit details
@@ -1498,6 +1434,119 @@ function IntakePage() {
                 placeholder="Please do not include Social Security numbers, diagnoses, insurance IDs, or unrelated medical history."
               />
             </label>
+              </section>
+
+              <section className="intake-panel" aria-labelledby="payment-title">
+                <h2 id="payment-title">Payment</h2>
+                <fieldset className="payment-methods">
+                  <legend>Payment method</legend>
+                  <div className="payment-method-grid">
+                    <div className="payment-option-list">
+                      <label>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="card"
+                          checked={form.paymentMethod === 'card'}
+                          onChange={() => setForm({ ...form, paymentMethod: 'card' })}
+                        />
+                        <span>Secure card checkout</span>
+                      </label>
+                      <label className="insurance-option-hidden">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="insurance"
+                          checked={form.paymentMethod === 'insurance'}
+                          onChange={() => setForm({ ...form, paymentMethod: 'insurance' })}
+                        />
+                        <span>Paid by insurance</span>
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="pay_at_site"
+                          checked={form.paymentMethod === 'pay_at_site'}
+                          onChange={() => setForm({ ...form, paymentMethod: 'pay_at_site' })}
+                        />
+                        <span>Pay at site</span>
+                      </label>
+                    </div>
+                    {form.paymentMethod === 'card' && (
+                      <div className="checkout-total" aria-live="polite">
+                        <span>Checkout total</span>
+                        <strong>{formatCurrency(cardTotal)}</strong>
+                        <small>Based on the number of people and selected specialty kits.</small>
+                      </div>
+                    )}
+                  </div>
+                  {form.paymentMethod === 'pay_at_site' && (
+                    <p className="payment-warning">Checks and Venmo are <strong>NOT</strong> accepted. On-site payment is processed through Square only.</p>
+                  )}
+                </fieldset>
+
+                {form.paymentMethod === 'insurance' && (
+                  <div className={`form-grid insurance-fields ${missingInsurance ? 'field-invalid' : ''}`}>
+                    <label>
+                      Insurance provider
+                      <input
+                        value={form.insuranceProvider}
+                        onChange={(event) => setForm({ ...form, insuranceProvider: event.target.value })}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Member ID
+                      <input
+                        value={form.insuranceMemberId}
+                        onChange={(event) => setForm({ ...form, insuranceMemberId: event.target.value })}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Group number
+                      <input
+                        value={form.insuranceGroupNumber}
+                        onChange={(event) => setForm({ ...form, insuranceGroupNumber: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Policyholder name
+                      <input
+                        value={form.policyholderName}
+                        onChange={(event) => setForm({ ...form, policyholderName: event.target.value })}
+                        required
+                      />
+                    </label>
+                  </div>
+                )}
+              </section>
+
+              <section className="intake-panel full-span" aria-labelledby="terms-title">
+                <h2 id="terms-title">Terms</h2>
+                <label className={`checkbox-field terms-acknowledgement ${missingTerms ? 'field-invalid' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={form.termsAccepted}
+                    onChange={(event) => setForm({ ...form, termsAccepted: event.target.checked })}
+                    required
+                  />
+                  <span>
+                    I agree to the <a href="/terms">Terms &amp; Conditions</a> and{' '}
+                    <a href="/privacy">Privacy Policy</a>, and authorize M.R.S. Medical Services to use my submitted
+                    information to process this visit request and payment.
+                  </span>
+                </label>
+
+                <button className="btn primary" type="submit" disabled={status === 'sending'}>
+                  {status === 'sending' ? 'Sending...' : form.paymentMethod === 'card' ? 'Continue to Checkout' : 'Submit Appointment'}
+                </button>
+                {statusMessage && (
+                  <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                    {statusMessage}
+                  </p>
+                )}
               </section>
             </div>
           </form>

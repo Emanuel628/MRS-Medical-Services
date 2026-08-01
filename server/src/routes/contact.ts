@@ -30,6 +30,7 @@ type ContactRequest = {
   isWeekendOrHoliday?: boolean;
   patientCount?: number;
   additionalPatientFeeCents?: number;
+  kitCount?: number;
   paymentMethod?: string;
   insuranceProvider?: string;
   insuranceMemberId?: string;
@@ -358,6 +359,7 @@ function renderIntakeNotificationEmail({
   ].filter(Boolean);
   const notes = cleanField(body.notes) || 'None';
   const patientCount = cleanOptionalNumber(body.patientCount) || 1;
+  const kitCount = body.hasKit ? cleanOptionalNumber(body.kitCount) || 1 : 0;
   const rows = [
     ['Scheduling contact', cleanField(body.name)],
     ['Phone', cleanField(body.phone)],
@@ -367,6 +369,7 @@ function renderIntakeNotificationEmail({
     ['Preferred lab', cleanField(body.preferredLab) || 'Not specified'],
     ['Prescription/order ready', body.prescriptionReady ? 'Yes' : 'No'],
     ['Specialty kit', body.hasKit ? 'Yes' : 'No'],
+    ['Number of specialty kits', body.hasKit ? String(kitCount) : 'Not applicable'],
     ['Submitted', submittedAt],
   ];
   const actionText = [
@@ -552,6 +555,7 @@ async function sendIntakeReceivedEmail(
         `M.R.S. Medical Services has confirmed your appointment for ${appointmentLabel}.`,
         `Receipt: ${formatMoneyFromCents(payment.amountCents) || 'Paid'} by secure card checkout.`,
         `Transaction number: ${payment.transactionId || 'Provided by Stripe checkout'}.`,
+        'Please put all pets away for the safety of the techs, and fast for 12 hours if required by the doctor.',
         'Appointments must be canceled at least 24 hours in advance.',
         ...(cancelUrl ? [`Cancellation link: ${cancelUrl}`] : []),
         ...(payment.receiptUrl ? [`Stripe receipt: ${payment.receiptUrl}`] : []),
@@ -570,6 +574,7 @@ async function sendIntakeReceivedEmail(
       `Hi ${row.fullName},`,
       `Thank you for requesting an appointment with M.R.S. Medical Services. We received your request for ${appointmentLabel}.`,
       'This is not a confirmed appointment yet. M.R.S. Medical Services will review the request and contact you to confirm the appointment.',
+      'Please put all pets away for the safety of the techs, and fast for 12 hours if required by the doctor.',
       'Appointments must be canceled at least 24 hours in advance.',
       ...(cancelUrl ? [`Cancellation link: ${cancelUrl}`] : []),
       ...(hasKit ? [kitScheduleNote] : []),
@@ -724,6 +729,7 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
     body.isStatOrRush === true ||
     body.isWeekendOrHoliday === true ||
     cleanOptionalNumber(body.patientCount) !== undefined ||
+    cleanOptionalNumber(body.kitCount) !== undefined ||
     cleanOptionalNumber(body.additionalPatientFeeCents) !== undefined;
   const priceQuote = requestType === 'intake'
     ? calculateIntakeVisitPrice({
@@ -731,6 +737,7 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
       appointmentDate: preferredDate,
       timeWindow: preferredTimeWindow,
       patientCount: cleanOptionalNumber(body.patientCount),
+      kitCount: body.hasKit ? cleanOptionalNumber(body.kitCount) || 1 : 0,
     })
     : hasPricingInputs
     ? calculateVisitPrice({
@@ -741,6 +748,7 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         isWeekendOrHoliday: body.isWeekendOrHoliday === true,
         patientCount: cleanOptionalNumber(body.patientCount),
         additionalPatientFeeCents: cleanOptionalNumber(body.additionalPatientFeeCents),
+        kitCount: body.hasKit ? cleanOptionalNumber(body.kitCount) || 1 : 0,
       })
     : null;
 
@@ -1470,6 +1478,7 @@ async function sendPatientConfirmationRequest(row: CancellationRow, reminderStag
       isWarning
         ? 'Your appointment must be confirmed today. If it is not confirmed, it may be canceled so the time can be made available for another patient.'
         : 'Please confirm that you still plan to keep this appointment.',
+      'Please put all pets away for the safety of the techs, and fast for 12 hours if required by the doctor.',
       'If you need to cancel, please use the cancellation link as early as possible. Appointments must be canceled at least 24 hours in advance.',
     ],
     actions: [
@@ -1652,6 +1661,7 @@ export async function markRequestConfirmedByMrsms(id: string, request: Request) 
         `Hi ${row.fullName},`,
         `M.R.S. Medical Services has confirmed your appointment for ${getAppointmentLabel(row.preferredDate, row.preferredTimeWindow)}.`,
         'You will receive another confirmation reminder before the appointment. Please confirm when that reminder arrives so the appointment stays on the schedule.',
+        'Please put all pets away for the safety of the techs, and fast for 12 hours if required by the doctor.',
         'Appointments must be canceled at least 24 hours in advance.',
       ],
       actions: [
