@@ -162,12 +162,12 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <p>Service is planned around an approved home, office, or facility visit.</p>
           </article>
           <article>
-            <strong>Flexible payment</strong>
-            <p>Visit cost is confirmed before scheduling and may vary based on mileage.</p>
+            <strong>Route-aware</strong>
+            <p>Visit requests are reviewed with location and timing in mind.</p>
           </article>
           <article>
-            <strong>Simple</strong>
-            <p>All you need to start is a prescription, lab order, or provider request.</p>
+            <strong>Easy to start</strong>
+            <p>The intake form gathers the basics needed to review a visit.</p>
           </article>
         </div>
       </section>
@@ -299,14 +299,14 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       <section className="section">
         <div className="wrap about-layout">
           <div className="content-block">
-            <h2>Focused, one-on-one service</h2>
+            <h2>Focused, one-on-one care</h2>
             <p>
-              The process is direct: confirm what needs to be collected, choose a workable visit
-              time, complete the draw, and handle the specimen according to the order.
+              M.R.S. keeps the experience personal and direct. The goal is to make blood work feel
+              less disruptive for patients, families, and care teams.
             </p>
             <p>
-              Service hours are Monday through Friday, 6 AM to 2 PM. Appointments require 24-hour
-              notice for cancellation.
+              Visits are handled with attention to comfort, professionalism, and clear
+              communication from the first message through the collection.
             </p>
           </div>
           <div className="about-note">
@@ -322,11 +322,11 @@ function AboutPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       <section className="cta">
         <div className="wrap cta-inner">
           <div>
-            <h3>Questions before scheduling?</h3>
-            <p>Use the intake form to share what you need and where the visit would take place.</p>
+            <h3>Have a general question?</h3>
+            <p>Use the contact page for questions that are not ready for intake.</p>
           </div>
-          <button className="btn teal" type="button" onClick={() => onNavigate('intake')}>
-            Request Visit
+          <button className="btn teal" type="button" onClick={() => onNavigate('contact')}>
+            Contact Us
           </button>
         </div>
       </section>
@@ -368,10 +368,9 @@ function ContactPage() {
 
   return (
     <main>
-      <PageHero title="Send a message about your visit.">
+      <PageHero title="Contact M.R.S. Medical Services.">
         <p>
-          Share the basic details and M.R.S. Medical Services can follow up about service area,
-          scheduling, and what paperwork or instructions are needed.
+          Send a general question or ask for help before using the intake form.
         </p>
       </PageHero>
 
@@ -411,7 +410,7 @@ function ContactPage() {
                 rows={6}
                 value={form.message}
                 onChange={(event) => setForm({ ...form, message: event.target.value })}
-                placeholder="Tell us what type of collection you need, your general location, and preferred timing."
+                placeholder="Write your message here."
                 required
               />
             </label>
@@ -430,11 +429,9 @@ function ContactPage() {
             <p><strong>Phone:</strong> <a href="tel:+19084637457">(908) 463-7457</a></p>
             <p><strong>Email:</strong> <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a></p>
             <p><strong>Hours:</strong> Monday-Friday, 6 AM-2 PM</p>
-            <p><strong>Payment:</strong> Visit cost is confirmed before scheduling.</p>
-            <p><strong>Cancellation:</strong> Please provide 24-hour notice.</p>
             <p>
-              Do not include sensitive medical information in the first message. Basic scheduling
-              details are enough to start the conversation.
+              For visit requests, use the intake page so the calendar, location, and required
+              paperwork can be reviewed together.
             </p>
           </aside>
         </div>
