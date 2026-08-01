@@ -6,7 +6,7 @@ export default function FinalCTA() {
           <p className="eyebrow eyebrow-light">Ready when you are</p>
           <h2>Bring the blood draw to you.</h2>
         </div>
-        <a className="button button-light" href="mailto:contact@example.com">Contact MRS Medical Services</a>
+        <a className="button button-light" href="mailto:dirving.mrsms@gmail.com">Contact MRS Medical Services</a>
       </div>
     </section>
   );

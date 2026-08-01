@@ -273,7 +273,7 @@ function ContactPage() {
       form.message,
     ].join('\n');
 
-    return `mailto:contact@mrsmedicalservices.com?subject=${encodeURIComponent(
+    return `mailto:dirving.mrsms@gmail.com?subject=${encodeURIComponent(
       'M.R.S. Medical Services visit request',
     )}&body=${encodeURIComponent(body)}`;
   }, [form]);
@@ -330,7 +330,7 @@ function ContactPage() {
           <aside className="contact-card">
             <h2>Contact details</h2>
             <p><strong>Phone:</strong> <a href="tel:+17327660266">(732) 766-0266</a></p>
-            <p><strong>Email:</strong> <a href="mailto:contact@mrsmedicalservices.com">contact@mrsmedicalservices.com</a></p>
+            <p><strong>Email:</strong> <a href="mailto:dirving.mrsms@gmail.com">dirving.mrsms@gmail.com</a></p>
             <p>
               Do not include sensitive medical information in the first message. Basic scheduling
               details are enough to start the conversation.
