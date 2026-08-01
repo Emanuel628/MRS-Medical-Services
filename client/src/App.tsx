@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
-type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake';
+type PageKey = 'home' | 'services' | 'about' | 'contact' | 'intake' | 'admin';
 
 const navItems: Array<{ key: PageKey; label: string; path: string }> = [
   { key: 'home', label: 'Home', path: '/' },
@@ -23,6 +23,20 @@ const labOptions = ['LabCorp', 'Quest', 'Oxford', 'Vibrant America', 'Boston Hea
 const serviceAreaOptions = ['Ocean County', 'Central New Jersey', 'Camden County'];
 const timeWindowOptions = ['6 AM - 8 AM', '8 AM - 10 AM', '10 AM - 12 PM', '12 PM - 2 PM'];
 
+type AdminRequest = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string;
+  message: string | null;
+  status: string;
+  requestType: string;
+  serviceArea: string | null;
+  preferredDate: string | null;
+  preferredTimeWindow: string | null;
+  createdAt: string;
+};
+
 const steps = [
   ['1', 'Request a visit', 'Share the basic details and location so the visit can be reviewed.'],
   ['2', 'Confirm the order', 'Have the required lab order, kit, or collection instructions ready.'],
@@ -35,6 +49,7 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith('/intake')) return 'intake';
   if (pathname.startsWith('/about')) return 'about';
   if (pathname.startsWith('/contact')) return 'contact';
+  if (pathname.startsWith('/admin')) return 'admin';
   return 'home';
 }
 
@@ -85,20 +100,16 @@ function Footer({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           <strong>M.R.S. Medical Services</strong>
           <p>Mobile phlebotomy services for convenient specimen collection.</p>
         </div>
-        <nav aria-label="Footer navigation">
-          {navItems.map((item) => (
-            <a
-              key={item.key}
-              href={item.path}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(item.key);
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
+        <a
+          className="admin-link"
+          href="/admin"
+          onClick={(event) => {
+            event.preventDefault();
+            onNavigate('admin');
+          }}
+        >
+          Admin
+        </a>
       </div>
     </footer>
   );
@@ -321,7 +332,7 @@ function ContactPage() {
       const response = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, requestType: 'contact' }),
       });
 
       const result = (await response.json().catch(() => ({}))) as { message?: string };
@@ -467,6 +478,10 @@ function IntakePage() {
           phone: form.phone,
           email: form.email,
           message,
+          requestType: 'intake',
+          serviceArea: form.serviceArea,
+          preferredDate: form.requestedDate,
+          preferredTimeWindow: form.preferredTimeWindow,
         }),
       });
 
@@ -646,6 +661,229 @@ function IntakePage() {
   );
 }
 
+function AdminPage() {
+  const [password, setPassword] = useState(() => window.sessionStorage.getItem('mrsAdminPassword') || '');
+  const [requests, setRequests] = useState<AdminRequest[]>([]);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [manualForm, setManualForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    serviceArea: '',
+    preferredDate: '',
+    preferredTimeWindow: '',
+    message: '',
+  });
+
+  const loadRequests = async (adminPassword = password) => {
+    setStatus('loading');
+    setStatusMessage('Loading control center...');
+
+    try {
+      const response = await fetch('/api/admin/contact-requests', {
+        headers: { 'x-admin-password': adminPassword },
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        requests?: AdminRequest[];
+      };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Control center could not be loaded.');
+      }
+
+      window.sessionStorage.setItem('mrsAdminPassword', adminPassword);
+      setRequests(result.requests || []);
+      setStatus('success');
+      setStatusMessage('');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Control center could not be loaded.');
+    }
+  };
+
+  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void loadRequests(password);
+  };
+
+  const handleManualIntake = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStatus('loading');
+    setStatusMessage('Saving manual intake...');
+
+    try {
+      const response = await fetch('/api/admin/manual-intake', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': password,
+        },
+        body: JSON.stringify(manualForm),
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Manual intake could not be saved.');
+      }
+
+      setManualForm({
+        name: '',
+        phone: '',
+        email: '',
+        serviceArea: '',
+        preferredDate: '',
+        preferredTimeWindow: '',
+        message: '',
+      });
+      await loadRequests(password);
+      setStatus('success');
+      setStatusMessage('Manual intake saved.');
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Manual intake could not be saved.');
+    }
+  };
+
+  return (
+    <main>
+      <PageHero title="Control center.">
+        <p>Review website requests and enter phone intakes for M.R.S. Medical Services.</p>
+      </PageHero>
+
+      <section className="section">
+        <div className="wrap admin-layout">
+          <form className="contact-form admin-panel" onSubmit={handleLogin}>
+            <h2>Admin access</h2>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <button className="btn primary" type="submit" disabled={status === 'loading'}>
+              {status === 'loading' ? 'Loading...' : 'Open Control Center'}
+            </button>
+            {statusMessage && (
+              <p className={`form-status ${status === 'error' ? 'form-status-error' : ''}`} role="status">
+                {statusMessage}
+              </p>
+            )}
+          </form>
+
+          <form className="contact-form admin-panel" onSubmit={handleManualIntake}>
+            <h2>Manual intake</h2>
+            <div className="form-grid">
+              <label>
+                Name
+                <input
+                  value={manualForm.name}
+                  onChange={(event) => setManualForm({ ...manualForm, name: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={manualForm.phone}
+                  onChange={(event) => setManualForm({ ...manualForm, phone: event.target.value })}
+                  required
+                />
+              </label>
+            </div>
+            <label>
+              Email
+              <input
+                type="email"
+                value={manualForm.email}
+                onChange={(event) => setManualForm({ ...manualForm, email: event.target.value })}
+              />
+            </label>
+            <div className="form-grid">
+              <label>
+                Service area
+                <select
+                  value={manualForm.serviceArea}
+                  onChange={(event) => setManualForm({ ...manualForm, serviceArea: event.target.value })}
+                >
+                  <option value="">Select service area</option>
+                  {serviceAreaOptions.map((area) => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                  <option value="Other">Other / not sure</option>
+                </select>
+              </label>
+              <label>
+                Preferred date
+                <input
+                  type="date"
+                  value={manualForm.preferredDate}
+                  onChange={(event) => setManualForm({ ...manualForm, preferredDate: event.target.value })}
+                />
+              </label>
+              <label>
+                Preferred time window
+                <select
+                  value={manualForm.preferredTimeWindow}
+                  onChange={(event) => setManualForm({ ...manualForm, preferredTimeWindow: event.target.value })}
+                >
+                  <option value="">Select if known</option>
+                  {timeWindowOptions.map((window) => (
+                    <option key={window} value={window}>{window}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label>
+              Notes
+              <textarea
+                rows={5}
+                value={manualForm.message}
+                onChange={(event) => setManualForm({ ...manualForm, message: event.target.value })}
+                required
+              />
+            </label>
+            <button className="btn primary" type="submit" disabled={status === 'loading' || !password}>
+              Save Manual Intake
+            </button>
+          </form>
+
+          <section className="admin-panel admin-requests">
+            <div className="admin-panel-header">
+              <h2>Saved requests</h2>
+              <button className="btn secondary" type="button" onClick={() => void loadRequests()} disabled={!password}>
+                Refresh
+              </button>
+            </div>
+            {requests.length ? (
+              <div className="request-list">
+                {requests.map((request) => (
+                  <article key={request.id} className="request-item">
+                    <div>
+                      <strong>{request.fullName}</strong>
+                      <span>{request.requestType.replace('_', ' ')}</span>
+                    </div>
+                    <p>{request.phone}{request.email ? ` | ${request.email}` : ''}</p>
+                    <p>{request.serviceArea || 'Area not set'} | {request.preferredDate || 'Date not set'} | {request.preferredTimeWindow || 'Time not set'}</p>
+                    <p>{request.message || 'No notes.'}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="admin-empty">No saved requests loaded.</p>
+            )}
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function PageHero({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="page-hero">
@@ -682,6 +920,7 @@ export default function App() {
       {activePage === 'intake' && <IntakePage />}
       {activePage === 'about' && <AboutPage onNavigate={navigate} />}
       {activePage === 'contact' && <ContactPage />}
+      {activePage === 'admin' && <AdminPage />}
       <Footer onNavigate={navigate} />
     </div>
   );

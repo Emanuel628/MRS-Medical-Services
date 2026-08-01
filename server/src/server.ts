@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
+import adminRouter from './routes/admin.js';
 import healthRouter from './routes/health.js';
 import contactRouter from './routes/contact.js';
 
@@ -16,6 +17,7 @@ app.use(cors({ origin: process.env.CLIENT_ORIGIN || true }));
 app.use(express.json({ limit: '100kb' }));
 app.use('/api/health', healthRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/admin', adminRouter);
 app.use(express.static(clientDist));
 
 app.get('*', (_request, response) => {
