@@ -269,19 +269,6 @@ function ServicesPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         </div>
       </section>
 
-      <section className="section muted">
-        <div className="wrap content-block">
-          <h2>Before requesting a visit</h2>
-          <p>
-            Please have any lab order, provider request, or collection paperwork ready.
-            M.R.S. Medical Services does not diagnose conditions, interpret lab results, or replace
-            medical advice from your provider.
-          </p>
-          <button className="btn primary" type="button" onClick={() => onNavigate('intake')}>
-            Request Visit
-          </button>
-        </div>
-      </section>
     </main>
   );
 }
@@ -558,7 +545,7 @@ function IntakePage() {
       </PageHero>
 
       <section className="section">
-        <div className="wrap form-layout">
+        <div className="wrap intake-layout">
           <form className="contact-form intake-form" onSubmit={handleSubmit}>
             <div className="form-grid">
               <label>
@@ -766,22 +753,6 @@ function IntakePage() {
             )}
           </form>
 
-          <aside className="contact-card">
-            <h2>Before you submit</h2>
-            <p>All blood draws require a prescription, lab order, or provider request.</p>
-            <p>Visit cost is confirmed before scheduling and may vary based on mileage.</p>
-            <p>Visit requests are reviewed before confirmation so drive time can be planned between appointments.</p>
-            {blockedTimes.length > 0 && (
-              <div className="availability-list">
-                <strong>Currently unavailable</strong>
-                {blockedTimes.slice(0, 6).map((blocked) => (
-                  <span key={blocked.id}>
-                    {formatScheduleDate(blocked.blockDate)} | {blocked.timeWindow}
-                  </span>
-                ))}
-              </div>
-            )}
-          </aside>
         </div>
       </section>
     </main>
