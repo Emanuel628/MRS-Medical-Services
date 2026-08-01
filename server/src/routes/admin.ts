@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import crypto from 'node:crypto';
 import { Resend } from 'resend';
 import { pool } from '../config/database.js';
+import { getStripeCheckoutUrls, getStripeClient, getStripeCurrency } from '../config/stripe.js';
 import { ensureDatabase, markRequestConfirmedByMrsms, saveContactRequest } from './contact.js';
 
 const router = Router();
@@ -38,8 +39,22 @@ type BlockedTimeRequest = {
   reason?: string;
 };
 
+type CheckoutSessionRequest = {
+  contactRequestId?: string;
+  amountCents?: number;
+  customerEmail?: string;
+  customerName?: string;
+  description?: string;
+};
+
 function cleanField(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function cleanInteger(value: unknown) {
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string' && value.trim() && /^-?\d+$/.test(value.trim())) return Number(value.trim());
+  return null;
 }
 
 function hasDatabaseUrl() {
@@ -470,6 +485,106 @@ router.post('/auth/logout', async (request, response) => {
 
 router.get('/auth/me', async (_request, response) => {
   response.json({ authenticated: true });
+});
+
+router.get('/billing/status', (_request, response) => {
+  const stripe = getStripeClient();
+  response.json({
+    configured: Boolean(stripe),
+    currency: getStripeCurrency(),
+    mode: process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test',
+  });
+});
+
+router.post('/billing/checkout-session', async (request, response) => {
+  const stripe = getStripeClient();
+  if (!stripe) {
+    response.status(503).json({ message: 'Stripe is not configured.' });
+    return;
+  }
+
+  const body = request.body as CheckoutSessionRequest;
+  const contactRequestId = cleanField(body.contactRequestId);
+  let amountCents = cleanInteger(body.amountCents);
+  let customerEmail = cleanEmail(body.customerEmail);
+  let customerName = cleanField(body.customerName);
+  let description = cleanField(body.description);
+
+  try {
+    if (contactRequestId) {
+      if (!hasDatabaseUrl()) {
+        response.status(503).json({ message: 'Database is not configured.' });
+        return;
+      }
+
+      await ensureDatabase();
+      const result = await pool.query<{
+        fullName: string;
+        email: string | null;
+        quotedPriceCents: number | null;
+      }>(
+        `SELECT
+          full_name AS "fullName",
+          email,
+          quoted_price_cents AS "quotedPriceCents"
+        FROM contact_requests
+        WHERE id = $1
+        LIMIT 1`,
+        [contactRequestId],
+      );
+
+      const row = result.rows[0];
+      if (!row) {
+        response.status(404).json({ message: 'Contact request could not be found.' });
+        return;
+      }
+
+      amountCents ??= row.quotedPriceCents;
+      customerEmail ||= row.email || '';
+      customerName ||= row.fullName;
+      description ||= `M.R.S. Medical Services visit for ${row.fullName}`;
+    }
+
+    if (!amountCents || amountCents < 50) {
+      response.status(400).json({ message: 'A payment amount of at least 50 cents is required.' });
+      return;
+    }
+
+    const checkoutUrls = getStripeCheckoutUrls();
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      success_url: checkoutUrls.successUrl,
+      cancel_url: checkoutUrls.cancelUrl,
+      customer_email: customerEmail || undefined,
+      client_reference_id: contactRequestId || undefined,
+      metadata: {
+        contactRequestId: contactRequestId || '',
+        customerName,
+      },
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: getStripeCurrency(),
+            unit_amount: amountCents,
+            product_data: {
+              name: description || 'M.R.S. Medical Services visit',
+            },
+          },
+        },
+      ],
+    });
+
+    response.json({
+      message: 'Checkout session created.',
+      id: session.id,
+      url: session.url,
+      livemode: session.livemode,
+    });
+  } catch (error) {
+    console.error('Stripe checkout session failed', error);
+    response.status(500).json({ message: 'Checkout session could not be created right now.' });
+  }
 });
 
 router.get('/contact-requests', async (_request, response) => {
