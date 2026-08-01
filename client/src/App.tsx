@@ -58,6 +58,25 @@ type AdminRequest = {
   email: string | null;
   phone: string;
   message: string | null;
+  patientName: string | null;
+  appointmentFor: string | null;
+  relationshipToPatient: string | null;
+  patientIsMinor: boolean | null;
+  guardianAuthorization: boolean | null;
+  streetAddress: string | null;
+  addressDetails: string | null;
+  town: string | null;
+  state: string | null;
+  zipCode: string | null;
+  preferredLab: string | null;
+  prescriptionReady: boolean | null;
+  hasKit: boolean | null;
+  patientCount: number | null;
+  kitCount: number | null;
+  quotedPriceCents: number | null;
+  paymentMethod: string | null;
+  paymentStatus: string | null;
+  stripeCheckoutSessionId: string | null;
   status: string;
   requestType: string;
   serviceArea: string | null;
@@ -202,6 +221,28 @@ function calculateIntakeTotal(requestedDate: string, timeWindow: string, patient
 function formatCurrency(value: number | null) {
   if (value === null) return '';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+}
+
+function formatCents(value: number | null) {
+  if (typeof value !== 'number') return 'Not calculated';
+  return formatCurrency(value / 100);
+}
+
+function formatYesNo(value: boolean | null) {
+  if (value === null) return 'Not set';
+  return value ? 'Yes' : 'No';
+}
+
+function formatPaymentMethod(value: string | null) {
+  if (value === 'card') return 'Card checkout';
+  if (value === 'pay_at_site') return 'Pay at site';
+  if (value === 'insurance') return 'Insurance';
+  return 'Not set';
+}
+
+function formatPaymentStatus(value: string | null) {
+  if (!value) return 'Not set';
+  return value.replace(/_/g, ' ');
 }
 
 function pageFromPath(pathname: string): PageKey {
@@ -1027,6 +1068,11 @@ function IntakePage() {
           phone: form.phone,
           email: form.email,
           message,
+          patientName: isSchedulingForSomeoneElse ? form.patientName : form.fullName,
+          appointmentFor: form.appointmentFor,
+          relationshipToPatient: isSchedulingForSomeoneElse ? form.relationshipToPatient : 'Self',
+          patientIsMinor: form.patientIsMinor,
+          guardianAuthorization: form.guardianAuthorization,
           requestType: 'intake',
           zipCode: form.zipCode,
           preferredDate: form.requestedDate,
@@ -2841,13 +2887,35 @@ function AdminPage() {
               <div className="request-list">
                 {requests.map((request) => (
                   <article key={request.id} className="request-item">
-                    <div>
+                    <div className="request-heading">
                       <strong>{request.fullName}</strong>
                       <span>{request.requestType.replace('_', ' ')}</span>
                     </div>
-                    <p>{request.phone}{request.email ? ` | ${request.email}` : ''}</p>
-                    <p>{request.serviceArea || 'Area not set'} | {request.preferredDate || 'Date not set'} | {request.preferredTimeWindow || 'Time not set'}</p>
-                    <p>{request.message || 'No notes.'}</p>
+                    <div className="request-detail-grid">
+                      <p><span>Contact</span>{request.phone}{request.email ? ` | ${request.email}` : ''}</p>
+                      <p><span>Patient</span>{request.patientName || request.fullName}</p>
+                      <p><span>Appointment for</span>{request.appointmentFor === 'other' ? 'Someone else' : 'Self'}</p>
+                      <p><span>Relationship</span>{request.relationshipToPatient || 'Not set'}</p>
+                      <p><span>Minor patient</span>{formatYesNo(request.patientIsMinor)}</p>
+                      <p><span>Guardian authorization</span>{request.patientIsMinor ? formatYesNo(request.guardianAuthorization) : 'Not applicable'}</p>
+                      <p><span>Address</span>{[
+                        request.streetAddress,
+                        request.addressDetails,
+                        request.town,
+                        request.state,
+                        request.zipCode,
+                      ].filter(Boolean).join(', ') || 'Address not set'}</p>
+                      <p><span>Service area</span>{request.serviceArea || 'Area not set'}</p>
+                      <p><span>Date / time</span>{request.preferredDate || 'Date not set'} | {request.preferredTimeWindow || 'Time not set'}</p>
+                      <p><span>Preferred lab</span>{request.preferredLab || 'Not specified'}</p>
+                      <p><span>Prescription ready</span>{formatYesNo(request.prescriptionReady)}</p>
+                      <p><span>Group size</span>{request.patientCount || 1} patient{(request.patientCount || 1) === 1 ? '' : 's'}</p>
+                      <p><span>Specialty kits</span>{request.hasKit ? `${request.kitCount || 1} kit${(request.kitCount || 1) === 1 ? '' : 's'}` : 'No'}</p>
+                      <p><span>Payment</span>{formatPaymentMethod(request.paymentMethod)} | {formatPaymentStatus(request.paymentStatus)}</p>
+                      <p><span>Quoted total</span>{formatCents(request.quotedPriceCents)}</p>
+                      <p><span>Stripe session</span>{request.stripeCheckoutSessionId || 'Not created'}</p>
+                    </div>
+                    <p className="request-notes">{request.message || 'No notes.'}</p>
                   </article>
                 ))}
               </div>

@@ -12,6 +12,11 @@ type ContactRequest = {
   phone?: string;
   email?: string;
   message?: string;
+  patientName?: string;
+  appointmentFor?: string;
+  relationshipToPatient?: string;
+  patientIsMinor?: boolean;
+  guardianAuthorization?: boolean;
   requestType?: string;
   serviceArea?: string;
   zipCode?: string;
@@ -29,8 +34,8 @@ type ContactRequest = {
   isStatOrRush?: boolean;
   isWeekendOrHoliday?: boolean;
   patientCount?: number;
-  additionalPatientFeeCents?: number;
   kitCount?: number;
+  additionalPatientFeeCents?: number;
   paymentMethod?: string;
   insuranceProvider?: string;
   insuranceMemberId?: string;
@@ -104,6 +109,20 @@ export async function ensureDatabase() {
       phone TEXT NOT NULL,
       zip_code VARCHAR(10),
       message TEXT,
+      patient_name TEXT,
+      appointment_for TEXT,
+      relationship_to_patient TEXT,
+      patient_is_minor BOOLEAN,
+      guardian_authorization BOOLEAN,
+      street_address TEXT,
+      address_details TEXT,
+      town TEXT,
+      state TEXT,
+      preferred_lab TEXT,
+      prescription_ready BOOLEAN,
+      has_kit BOOLEAN,
+      patient_count INTEGER,
+      kit_count INTEGER,
       status VARCHAR(30) NOT NULL DEFAULT 'new',
       request_type VARCHAR(30) NOT NULL DEFAULT 'contact',
       service_area TEXT,
@@ -128,6 +147,20 @@ export async function ensureDatabase() {
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS service_area TEXT');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS preferred_date DATE');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS preferred_time_window TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS patient_name TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS appointment_for TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS relationship_to_patient TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS patient_is_minor BOOLEAN');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS guardian_authorization BOOLEAN');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS street_address TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS address_details TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS town TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS state TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS preferred_lab TEXT');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS prescription_ready BOOLEAN');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS has_kit BOOLEAN');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS patient_count INTEGER');
+  await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS kit_count INTEGER');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS cancel_token UUID');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS patient_confirm_token UUID');
   await pool.query('ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS patient_confirmed_at TIMESTAMPTZ');
@@ -722,6 +755,18 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
   const zipCode = cleanField(body.zipCode) || null;
   const preferredDate = cleanField(body.preferredDate) || null;
   const preferredTimeWindow = cleanField(body.preferredTimeWindow) || null;
+  const patientName = cleanField(body.patientName) || name;
+  const appointmentFor = cleanField(body.appointmentFor) || 'self';
+  const relationshipToPatient = cleanField(body.relationshipToPatient) || (appointmentFor === 'self' ? 'Self' : null);
+  const streetAddress = cleanField(body.streetAddress) || null;
+  const addressDetails = cleanField(body.addressDetails) || null;
+  const town = cleanField(body.town) || null;
+  const state = cleanField(body.state) || null;
+  const preferredLab = cleanField(body.preferredLab) || null;
+  const prescriptionReady = typeof body.prescriptionReady === 'boolean' ? body.prescriptionReady : null;
+  const hasKit = body.hasKit === true;
+  const patientCount = cleanOptionalNumber(body.patientCount) || 1;
+  const kitCount = hasKit ? cleanOptionalNumber(body.kitCount) || 1 : 0;
   const paymentMethod = requestType === 'intake' ? cleanPaymentMethod(cleanField(body.paymentMethod)) : null;
   const insuranceDetails = paymentMethod === 'insurance' ? getInsuranceDetails(body) : null;
   const oneWayTravelMinutes = cleanOptionalNumber(body.oneWayTravelMinutes);
@@ -736,8 +781,8 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
       zipCode,
       appointmentDate: preferredDate,
       timeWindow: preferredTimeWindow,
-      patientCount: cleanOptionalNumber(body.patientCount),
-      kitCount: body.hasKit ? cleanOptionalNumber(body.kitCount) || 1 : 0,
+      patientCount,
+      kitCount,
     })
     : hasPricingInputs
     ? calculateVisitPrice({
@@ -746,9 +791,9 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         timeWindow: preferredTimeWindow,
         isStatOrRush: body.isStatOrRush === true,
         isWeekendOrHoliday: body.isWeekendOrHoliday === true,
-        patientCount: cleanOptionalNumber(body.patientCount),
+        patientCount,
         additionalPatientFeeCents: cleanOptionalNumber(body.additionalPatientFeeCents),
-        kitCount: body.hasKit ? cleanOptionalNumber(body.kitCount) || 1 : 0,
+        kitCount,
       })
     : null;
 
@@ -764,6 +809,20 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         phone,
         zip_code,
         message,
+        patient_name,
+        appointment_for,
+        relationship_to_patient,
+        patient_is_minor,
+        guardian_authorization,
+        street_address,
+        address_details,
+        town,
+        state,
+        preferred_lab,
+        prescription_ready,
+        has_kit,
+        patient_count,
+        kit_count,
         request_type,
         service_area,
         preferred_date,
@@ -774,7 +833,14 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         payment_status,
         insurance_details
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15,
+        $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25,
+        $26, $27, $28
+      )
       RETURNING
         id,
         cancel_token AS "cancelToken",
@@ -787,6 +853,20 @@ export async function saveContactRequest(body: ContactRequest): Promise<SavedCon
         phone,
         zipCode,
         message || null,
+        patientName,
+        appointmentFor,
+        relationshipToPatient,
+        body.patientIsMinor === true,
+        body.patientIsMinor === true ? body.guardianAuthorization === true : null,
+        streetAddress,
+        addressDetails,
+        town,
+        state,
+        preferredLab,
+        prescriptionReady,
+        hasKit,
+        patientCount,
+        kitCount,
         requestType,
         serviceArea,
         preferredDate,
