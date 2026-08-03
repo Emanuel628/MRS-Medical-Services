@@ -1216,6 +1216,37 @@ router.post('/payment-success', async (request, response) => {
   }
 });
 
+router.post('/payment-cancelled', async (request, response) => {
+  const id = cleanField(request.body?.id);
+  if (!id || !isUuid(id)) {
+    response.status(400).json({ message: 'Appointment request is required.' });
+    return;
+  }
+
+  if (!hasDatabaseUrl()) {
+    response.json({ message: 'Checkout cancelled.' });
+    return;
+  }
+
+  try {
+    await ensureDatabase();
+    await pool.query(
+      `UPDATE contact_requests
+       SET payment_status = CASE WHEN payment_status = 'checkout_pending' THEN 'checkout_cancelled' ELSE payment_status END,
+         updated_at = NOW()
+       WHERE id = $1
+         AND request_type = 'intake'
+         AND payment_status <> 'paid'`,
+      [id],
+    );
+    await releasePendingCheckoutReservation(id);
+    response.json({ message: 'Checkout cancelled.' });
+  } catch (error) {
+    console.error('Checkout cancellation release failed', error);
+    response.status(500).json({ message: 'Checkout cancellation could not be processed right now.' });
+  }
+});
+
 router.get('/cancel/:token', async (request, response) => {
   const token = cleanField(request.params.token);
   if (!token || !isUuid(token)) {

@@ -82,6 +82,10 @@
   }
 
   .header-inner {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
     min-height: 76px;
   }
 
@@ -90,8 +94,27 @@
     max-width: 55vw;
   }
 
+  .menu-toggle {
+    display: inline-flex;
+  }
+
   .header nav {
     display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 12px 0 16px;
+  }
+
+  .header nav.nav-open {
+    display: flex;
+  }
+
+  .header nav a {
+    width: 100%;
+    padding: 10px 4px;
+    font-size: 13px;
   }
 
   .hero-inner {

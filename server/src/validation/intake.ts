@@ -75,13 +75,13 @@ function isWeekday(dateKey: string) {
   return day >= 1 && day <= 5;
 }
 
-function isWithinBookingWindow(dateKey: string) {
-  const todayKey = getEasternDateKey(new Date());
-  if (dateKey < todayKey) return false;
-
-  const maxDate = new Date();
-  maxDate.setDate(maxDate.getDate() + MAX_ADVANCE_BOOKING_DAYS);
-  return dateKey <= getEasternDateKey(maxDate);
+function getEasternHour(date: Date) {
+  const hour = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hourCycle: 'h23',
+    hour: 'numeric',
+  }).formatToParts(date).find((part) => part.type === 'hour')?.value;
+  return hour ? Number(hour) : 0;
 }
 
 function getTimeWindowStartHour(value: string) {
@@ -91,6 +91,20 @@ function getTimeWindowStartHour(value: string) {
   const hour = Number(match[1]);
   if (match[2] === 'AM') return hour === 12 ? 0 : hour;
   return hour === 12 ? 12 : hour + 12;
+}
+
+function isWithinBookingWindow(dateKey: string, timeWindow: string) {
+  const now = new Date();
+  const todayKey = getEasternDateKey(now);
+  if (dateKey < todayKey) return false;
+  if (dateKey === todayKey) {
+    const startHour = getTimeWindowStartHour(timeWindow);
+    if (startHour === null || startHour <= getEasternHour(now)) return false;
+  }
+
+  const maxDate = new Date();
+  maxDate.setDate(maxDate.getDate() + MAX_ADVANCE_BOOKING_DAYS);
+  return dateKey <= getEasternDateKey(maxDate);
 }
 
 function isValidEmail(value: string) {
@@ -180,13 +194,14 @@ export function validateContactSubmission(body: Record<string, unknown>): string
   if (!isWeekday(preferredDate)) {
     return 'Choose a weekday appointment date.';
   }
-  if (!isWithinBookingWindow(preferredDate)) {
-    return 'Choose an appointment date within the available booking window.';
-  }
 
   const preferredTimeWindow = trimmed(body.preferredTimeWindow);
   if (!timeWindowOptions.includes(preferredTimeWindow)) {
     return 'Choose a valid appointment time window.';
+  }
+
+  if (!isWithinBookingWindow(preferredDate, preferredTimeWindow)) {
+    return 'Choose an appointment date within the available booking window.';
   }
 
   const hasKit = body.hasKit === true;
