@@ -153,6 +153,19 @@ const adminSessionTokenKey = 'mrsAdminToken';
 const adminSessionExpiryKey = 'mrsAdminTokenExpiresAt';
 const inactivityLimitMs = 15 * 60 * 1000;
 
+function AccessibilityAnnouncer({ message }: { message: string }) {
+  return (
+    <div
+      className="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {message}
+    </div>
+  );
+}
+
 function getAdminToken() {
   const token = window.sessionStorage.getItem(adminSessionTokenKey);
   const expiresAt = window.sessionStorage.getItem(adminSessionExpiryKey);
@@ -3404,12 +3417,26 @@ function PageHero({ title, children }: { title: string; children: ReactNode }) {
 
 export default function App() {
   const [activePage, setActivePage] = useState<PageKey>(() => pageFromPath(window.location.pathname));
+  const [accessibilityMessage, setAccessibilityMessage] = useState('');
 
   useEffect(() => {
     const onPopState = () => setActivePage(pageFromPath(window.location.pathname));
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  useEffect(() => {
+  const mainHeading = document.querySelector<HTMLElement>('#main-content h1');
+
+  if (mainHeading) {
+    mainHeading.setAttribute('tabindex', '-1');
+    mainHeading.focus();
+  }
+
+  setAccessibilityMessage(
+    `${document.querySelector('#main-content h1')?.textContent || 'Page'} loaded`,
+);
+}, [activePage]);
 
   useEffect(() => {
     let timeoutId = window.setTimeout(() => undefined, inactivityLimitMs);
@@ -3457,6 +3484,14 @@ export default function App() {
 
   return (
     <div className="page">
+     <div
+         className="sr-only"
+         role="status"
+         aria-live="polite"
+         aria-atomic="true"
+      >
+         {accessibilityMessage}
+      </div>
       <Header activePage={activePage} onNavigate={navigate} />
       <div id="main-content" tabIndex={-1}>
         {activePage === 'home' && <HomePage onNavigate={navigate} />}
