@@ -135,7 +135,7 @@ export function validateContactSubmission(body: Record<string, unknown>): string
     return 'Appointment recipient is not valid.';
   }
 
-  if (appointmentFor === 'other') {
+  if (appointmentFor === 'someone_else') {
     if (!trimmed(body.patientName) || exceedsLength(body.patientName, LENGTH_LIMITS.patientName)) {
       return 'Enter the patient name.';
     }
