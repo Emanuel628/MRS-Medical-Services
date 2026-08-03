@@ -710,6 +710,7 @@ async function confirmPaidCheckoutSession(session: Stripe.Checkout.Session) {
          stripe_checkout_session_id = $2,
          status = 'mrsms_confirmed',
          mrsms_confirmed_at = COALESCE(mrsms_confirmed_at, NOW()),
+         cancel_token = COALESCE(cancel_token, gen_random_uuid()),
          updated_at = NOW()
        WHERE id = $1
          AND request_type = 'intake'
