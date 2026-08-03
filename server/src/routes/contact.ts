@@ -353,7 +353,7 @@ function renderEmailHtml(title: string, paragraphs: string[], actions: Array<{ l
     .map(
       (action) => `
         <p style="margin: 28px 0;">
-          <a href="${escapeHtml(action.url)}" style="display:inline-block; padding:14px 20px; background-color:#062948 !important; border:2px solid #062948; color:#ffffff !important; text-decoration:none !important; border-radius:4px; font-weight:700;"
+          <a href="${escapeHtml(action.url)}" style="display:inline-block; padding:14px 20px; background-color:#062948 !important; border:2px solid #062948; color:#ffffff !important; text-decoration:none !important; border-radius:4px; font-weight:700;">
             ${escapeHtml(action.label)}
           </a>
         </p>
