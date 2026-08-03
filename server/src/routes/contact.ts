@@ -1736,6 +1736,41 @@ function getEasternDateKey(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
+async function cleanupStaleAppointmentData() {
+  // Remove expired or canceled slot reservations after 7 days.
+  await pool.query(`
+    DELETE FROM appointment_slot_reservations
+    WHERE status IN ('expired', 'cancelled')
+      AND updated_at < NOW() - INTERVAL '7 days'
+  `);
+
+  // Remove abandoned card-payment requests after 30 days.
+  // Paid, confirmed, refunded, insurance, and pay-at-site records are protected.
+  await pool.query(`
+    DELETE FROM contact_requests
+    WHERE request_type = 'intake'
+      AND payment_method = 'card'
+      AND payment_status IN (
+        'checkout_pending',
+        'checkout_cancelled',
+        'checkout_expired'
+      )
+      AND status NOT IN ('mrsms_confirmed', 'confirmed', 'completed')
+      AND patient_confirmed_at IS NULL
+      AND mrsms_confirmed_at IS NULL
+      AND refunded_at IS NULL
+      AND stripe_refund_id IS NULL
+      AND created_at < NOW() - INTERVAL '30 days'
+  `);
+
+  // Stripe webhook records are only technical processing logs.
+  await pool.query(`
+    DELETE FROM stripe_webhook_events
+    WHERE status = 'processed'
+      AND processed_at < NOW() - INTERVAL '90 days'
+  `);
+}
+
 const reminderJobLockKey = "hashtext('mrsms_appointment_reminders')::bigint";
 
 async function runReminderPass() {
@@ -1865,6 +1900,7 @@ export async function processAppointmentReminders() {
 
     try {
       await runReminderPass();
+      await cleanupStaleAppointmentData();
     } finally {
       await lockClient.query(`SELECT pg_advisory_unlock(${reminderJobLockKey})`);
     }
