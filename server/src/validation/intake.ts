@@ -131,7 +131,7 @@ export function validateContactSubmission(body: Record<string, unknown>): string
   if (requestType !== 'intake') return null;
 
   const appointmentFor = trimmed(body.appointmentFor) || 'self';
-  if (appointmentFor !== 'self' && appointmentFor !== 'other') {
+  if (appointmentFor !== 'self' && appointmentFor !== 'someone_else') {
     return 'Appointment recipient is not valid.';
   }
 
