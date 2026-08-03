@@ -1232,7 +1232,7 @@ function IntakePage() {
                   return (
                     <button
                       key={dateKey}
-                      className={`calendar-day ${form.requestedDate === dateKey ? 'selected' : ''}`}
+                      className={`calendar-day ${form.requestedDate === dateKey ? 'selected' : ''} ${isFull && isCurrentMonth && !isPast ? 'fully-booked' : ''}`}
                       type="button"
                       disabled={isDisabled}
                       onClick={() => {
