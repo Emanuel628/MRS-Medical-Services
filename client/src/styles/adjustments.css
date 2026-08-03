@@ -140,3 +140,31 @@
     grid-template-columns: 1fr;
   }
 }
+
+/*block out dully booked dates in red*/
+
+/* Fully booked calendar dates */
+
+.calendar-day.fully-booked,
+.calendar-day.fully-booked:disabled {
+  background: #fff1f2;
+  border-color: #dc3545;
+  color: #a41321;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.calendar-day.fully-booked span {
+  color: #a41321;
+  font-weight: 700;
+}
+
+.calendar-day.fully-booked small {
+  color: #b4232f;
+  font-weight: 700;
+}
+
+.calendar-day.fully-booked:hover {
+  background: #fff1f2;
+  border-color: #dc3545;
+}
