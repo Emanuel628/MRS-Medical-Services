@@ -104,6 +104,22 @@ a {
   color: var(--teal-dark);
 }
 
+.menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--navy-deep);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .hero {
   min-height: 520px;
   background: linear-gradient(90deg, #ffffff 0%, #ffffff 53%, #f5f9fa 53%, #f5f9fa 100%);
@@ -697,6 +713,26 @@ a {
   border-color: #b70f1e;
   background: #fff8f8;
   box-shadow: 0 0 0 3px rgba(183, 15, 30, .08);
+}
+
+.field-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #b70f1e;
+  border-radius: 6px;
+  background: #fff2f2;
+  color: #9f102e;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.field-warning::before {
+  content: '⚠';
+  font-size: 16px;
 }
 
 .field-invalid {

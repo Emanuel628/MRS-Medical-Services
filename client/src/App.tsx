@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 type PageKey =
   | 'home'
@@ -246,6 +246,12 @@ function pageFromPath(pathname: string): PageKey {
 }
 
 function Header({ activePage, onNavigate }: { activePage: PageKey; onNavigate: (page: PageKey) => void }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [activePage]);
+
   return (
     <header className="header">
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -262,7 +268,18 @@ function Header({ activePage, onNavigate }: { activePage: PageKey; onNavigate: (
           <img src="/images/mrs-logo.png" alt="M.R.S. Medical Services" />
         </a>
 
-        <nav aria-label="Primary navigation">
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-expanded={isMenuOpen}
+          aria-controls="primary-navigation"
+          aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+          onClick={() => setIsMenuOpen((open) => !open)}
+        >
+          <span aria-hidden="true">{isMenuOpen ? '✕' : '☰'}</span>
+        </button>
+
+        <nav id="primary-navigation" aria-label="Primary navigation" className={isMenuOpen ? 'nav-open' : ''}>
           {navItems.map((item) => (
             <a
               key={item.key}
@@ -820,6 +837,7 @@ function IntakePage() {
   const [showServiceAreaNotice, setShowServiceAreaNotice] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(getNextWeekday(new Date())));
+  const appointmentPanelRef = useRef<HTMLElement | null>(null);
   const todayKey = getLocalDateKey(new Date());
   const calendarDays = getCalendarDays(visibleMonth);
   const selectedBlockedWindows = new Set(
@@ -828,7 +846,7 @@ function IntakePage() {
       .map((blocked) => blocked.timeWindow),
   );
   const isSchedulingForSomeoneElse = form.appointmentFor === 'someone_else';
-  const selectedUnavailableWindows = getUnavailableWindows(selectedBlockedWindows, form.hasKit);
+  const selectedUnavailableWindows = getUnavailableWindowsForDate(form.requestedDate, selectedBlockedWindows, form.hasKit);
   const effectivePatientCount = form.isGroup ? Math.max(2, Math.floor(Number(form.patientCount) || 2)) : 1;
   const effectiveKitCount = form.hasKit ? Math.max(1, Math.floor(Number(form.kitCount) || 1)) : 0;
   const hasValidPatientCount = !form.isGroup || Number(form.patientCount) >= 2;
@@ -885,6 +903,7 @@ function IntakePage() {
     if (payment === 'success') {
       const storedRequest = window.sessionStorage.getItem('mrsPendingIntake');
       const pendingRequest = storedRequest ? JSON.parse(storedRequest) as {
+        id?: string;
         fullName?: string;
         email?: string;
         requestedDate?: string;
@@ -917,8 +936,24 @@ function IntakePage() {
     }
 
     if (payment === 'cancelled') {
+      const storedRequest = window.sessionStorage.getItem('mrsPendingIntake');
+      const pendingRequest = storedRequest ? JSON.parse(storedRequest) as { id?: string } : null;
+
+      if (pendingRequest?.id) {
+        void fetch('/api/contact/payment-cancelled', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: pendingRequest.id }),
+        })
+          .then(() => fetch('/api/availability/blocked-times'))
+          .then((response) => response.json())
+          .then((result: { blockedTimes?: BlockedTime[] }) => setBlockedTimes(result.blockedTimes || []))
+          .catch(() => undefined);
+      }
+
+      window.sessionStorage.removeItem('mrsPendingIntake');
       setStatus('idle');
-      setStatusMessage('Secure checkout was cancelled. Choose a payment option and submit again when ready.');
+      setStatusMessage('Secure checkout was cancelled. That time slot has been released. Choose a payment option and submit again when ready.');
       window.history.replaceState(null, '', '/intake');
     }
   }, []);
@@ -932,7 +967,7 @@ function IntakePage() {
   useEffect(() => {
     const currentUnavailable = unavailableByDate[form.requestedDate] || new Set<string>();
     const currentDateIsOpen = form.requestedDate &&
-      !timeWindowOptions.every((window) => getUnavailableWindows(currentUnavailable, form.hasKit).has(window));
+      !timeWindowOptions.every((window) => getUnavailableWindowsForDate(form.requestedDate, currentUnavailable, form.hasKit).has(window));
 
     if (currentDateIsOpen && !selectedUnavailableWindows.has(form.preferredTimeWindow)) return;
 
@@ -944,7 +979,7 @@ function IntakePage() {
       ...currentForm,
       requestedDate: getLocalDateKey(nextAvailableDate),
       preferredTimeWindow: currentForm.preferredTimeWindow &&
-        !getUnavailableWindows(unavailableByDate[getLocalDateKey(nextAvailableDate)] || new Set<string>(), currentForm.hasKit).has(currentForm.preferredTimeWindow)
+        !getUnavailableWindowsForDate(getLocalDateKey(nextAvailableDate), unavailableByDate[getLocalDateKey(nextAvailableDate)] || new Set<string>(), currentForm.hasKit).has(currentForm.preferredTimeWindow)
         ? currentForm.preferredTimeWindow
         : '',
     }));
@@ -957,6 +992,12 @@ function IntakePage() {
     if (!form.requestedDate || !form.preferredTimeWindow) {
       setStatus('error');
       setStatusMessage('Please choose an available date and time window.');
+      const panel = appointmentPanelRef.current;
+      if (panel) {
+        const headerOffset = (document.querySelector('.header') as HTMLElement | null)?.offsetHeight || 0;
+        const top = panel.getBoundingClientRect().top + window.scrollY - headerOffset - 16;
+        window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' });
+      }
       return;
     }
 
@@ -1076,7 +1117,7 @@ function IntakePage() {
         }),
       });
 
-      const result = (await response.json().catch(() => ({}))) as { message?: string; checkoutUrl?: string };
+      const result = (await response.json().catch(() => ({}))) as { message?: string; checkoutUrl?: string; id?: string };
 
       if (!response.ok) {
         throw new Error(result.message || 'Appointment form could not be sent right now.');
@@ -1084,6 +1125,7 @@ function IntakePage() {
 
       if (result.checkoutUrl) {
         window.sessionStorage.setItem('mrsPendingIntake', JSON.stringify({
+          id: result.id,
           fullName: form.fullName,
           email: form.email,
           requestedDate: form.requestedDate,
@@ -1131,8 +1173,17 @@ function IntakePage() {
             onInvalid={() => setAttemptedSubmit(true)}
           >
             <div className="intake-columns">
-              <section className="intake-panel appointment-panel full-span" aria-labelledby="appointment-info-title">
+              <section
+                className="intake-panel appointment-panel full-span"
+                aria-labelledby="appointment-info-title"
+                ref={appointmentPanelRef}
+              >
                 <h2 id="appointment-info-title">Appointment</h2>
+                {(missingDate || missingTime) && (
+                  <p className="field-warning" role="alert">
+                    Please select an available date and time to continue.
+                  </p>
+                )}
                 <div className={`booking-calendar ${missingDate || missingTime ? 'field-invalid' : ''}`} aria-label="Visit availability picker">
               <div className="calendar-header">
                 <button
@@ -1172,7 +1223,7 @@ function IntakePage() {
 
                   const dateKey = getLocalDateKey(date);
                   const blockedForDate = unavailableByDate[dateKey] || new Set<string>();
-                  const unavailableForDate = getUnavailableWindows(blockedForDate, form.hasKit);
+                  const unavailableForDate = getUnavailableWindowsForDate(dateKey, blockedForDate, form.hasKit);
                   const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
                   const isPast = dateKey < todayKey;
                   const isFull = timeWindowOptions.every((window) => unavailableForDate.has(window));
@@ -3253,6 +3304,24 @@ function getUnavailableWindows(blockedWindows: Set<string>, hasKit: boolean) {
   );
 }
 
+function getPastWindows(now: Date) {
+  const currentHour = now.getHours();
+  return new Set(
+    timeWindowOptions.filter((window) => {
+      const startHour = getTimeWindowStartHour(window);
+      return startHour !== null && startHour <= currentHour;
+    }),
+  );
+}
+
+function getUnavailableWindowsForDate(dateKeyValue: string, blockedWindows: Set<string>, hasKit: boolean) {
+  const unavailable = getUnavailableWindows(blockedWindows, hasKit);
+  const now = new Date();
+  if (dateKeyValue !== getLocalDateKey(now)) return unavailable;
+
+  return new Set([...unavailable, ...getPastWindows(now)]);
+}
+
 function startOfMonth(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), 1);
 }
@@ -3286,7 +3355,7 @@ function getNextAvailableVisitDate(blockedTimes: BlockedTime[], hasKit: boolean)
     const day = cursor.getDay();
     if (day !== 0 && day !== 6) {
       const dateKey = getLocalDateKey(cursor);
-      const unavailable = getUnavailableWindows(unavailableByDate[dateKey] || new Set<string>(), hasKit);
+      const unavailable = getUnavailableWindowsForDate(dateKey, unavailableByDate[dateKey] || new Set<string>(), hasKit);
       const isFull = timeWindowOptions.every((window) => unavailable.has(window));
       if (!isFull) return new Date(cursor);
     }
