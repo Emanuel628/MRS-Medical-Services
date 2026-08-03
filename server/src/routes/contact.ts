@@ -353,7 +353,7 @@ function renderEmailHtml(title: string, paragraphs: string[], actions: Array<{ l
     .map(
       (action) => `
         <p style="margin: 28px 0;">
-          <a href="${escapeHtml(action.url)}" style="display: inline-block; padding: 13px 18px; background: #062948; color: #ffffff; text-decoration: none; border-radius: 4px; font-weight: 700;">
+          <a href="${escapeHtml(action.url)}" style="display:inline-block; padding:14px 20px; background-color:#062948 !important; border:2px solid #062948; color:#ffffff !important; text-decoration:none !important; border-radius:4px; font-weight:700;"
             ${escapeHtml(action.label)}
           </a>
         </p>
@@ -606,7 +606,6 @@ async function sendIntakeReceivedEmail(
         `Transaction number: ${payment.transactionId || 'Provided by Stripe checkout'}.`,
         'Please put all pets away for the safety of the techs, and fast for 12 hours if required by the doctor.',
         'Appointments must be canceled at least 24 hours in advance.',
-        ...(cancelUrl ? [`Cancellation link: ${cancelUrl}`] : []),
         ...(payment.receiptUrl ? [`Stripe receipt: ${payment.receiptUrl}`] : []),
         ...(hasKit ? [kitScheduleNote] : []),
       ],
