@@ -3434,21 +3434,9 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const hasNavigatedRef = useRef(false);
-
-useEffect(() => {
-  if (!hasNavigatedRef.current) {
-    hasNavigatedRef.current = true;
-    return;
-  }
-
+  useEffect(() => {
   const mainHeading =
     document.querySelector<HTMLElement>('#main-content h1');
-
-  if (mainHeading) {
-    mainHeading.setAttribute('tabindex', '-1');
-    mainHeading.focus({ preventScroll: true });
-  }
 
   setAccessibilityMessage(
     `${mainHeading?.textContent || 'Page'} loaded`,
