@@ -1267,30 +1267,16 @@ function IntakePage() {
                 })}
               </div>
 
-              <div className="time-slot-panel">
-                <strong>{form.requestedDate ? 'Available hourly times' : 'Choose a date to see times'}</strong>
-                {form.hasKit && (
-                  <span className="time-slot-note">Kit collections must be scheduled before 10 AM.</span>
-                )}
-                <div className="time-slot-rolodex">
-                  {timeWindowOptions.map((window) => {
-                    const isKitBlocked = form.hasKit && isKitRestrictedWindow(window);
-                    const isUnavailable = selectedUnavailableWindows.has(window);
-
-                    return (
-                      <button
-                        key={window}
-                        className={`time-slot ${form.preferredTimeWindow === window ? 'selected' : ''}`}
-                        type="button"
-                        disabled={!form.requestedDate || isUnavailable}
-                        onClick={() => setForm({ ...form, preferredTimeWindow: window })}
-                      >
-                        <span>{window}</span>
-                        <small>{isKitBlocked ? 'Kit cutoff' : isUnavailable ? 'Unavailable' : 'Available'}</small>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="time-slot-rolodex">
+                  {form.requestedDate && timeWindowOptions
+                      .filter((window) => !selectedUnavailableWindows.has(window))
+                      .map((window) => (
+                        <button key={window} className={`time-slot ${form.preferredTimeWindow === window ? 'selected' : ''}`} type="button" onClick={() => setForm({ ...form, preferredTimeWindow: window })}>
+                            <span>{window}</span>
+                            <small>Available</small>
+                        </button>
+                       ))}
+                 </div>
               </div>
             </div>
               </section>
