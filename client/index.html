@@ -7,7 +7,7 @@
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="author" content="M.R.S. Medical Services" />
     <meta name="application-name" content="M.R.S. Medical Services" />
-    <meta name="mrs-build" content="2026-08-01-empty-checkout-total-cache-bump" />
+    <meta name="mrs-build" content="2026-08-17-stripe-checkout-temporary-block" />
     <link rel="canonical" href="https://www.mrsmedicalservices.com/" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/favicon.png" />
@@ -66,6 +66,78 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // TEMPORARY SAFETY BLOCK: Do not re-enable online Stripe Checkout until
+      // M.R.S. Medical Services has provided and verified the live Stripe API keys.
+      (() => {
+        const nativeFetch = window.fetch.bind(window);
+
+        window.fetch = async (input, init) => {
+          const url = input instanceof Request ? input.url : String(input);
+          const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+
+          if (method === 'POST' && url.includes('/billing/checkout-session')) {
+            return new Response(JSON.stringify({ message: 'Online card checkout is temporarily unavailable.' }), {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          if (method === 'POST' && url.includes('/api/contact') && typeof init?.body === 'string') {
+            try {
+              const payload = JSON.parse(init.body);
+              if (payload.requestType === 'intake' && payload.paymentMethod === 'card') {
+                init = {
+                  ...init,
+                  body: JSON.stringify({ ...payload, paymentMethod: 'pay_at_site' }),
+                };
+              }
+            } catch {
+              // Leave non-JSON requests unchanged.
+            }
+          }
+
+          return nativeFetch(input, init);
+        };
+
+        const applyCheckoutBlock = () => {
+          const cardOption = document.querySelector('input[name="paymentMethod"][value="card"]');
+          const payAtSiteOption = document.querySelector('input[name="paymentMethod"][value="pay_at_site"]');
+
+          if (!cardOption || !payAtSiteOption) return;
+
+          cardOption.disabled = true;
+          const cardLabel = cardOption.closest('label');
+          if (cardLabel) cardLabel.hidden = true;
+
+          const checkoutTotal = document.querySelector('.checkout-total');
+          if (checkoutTotal) checkoutTotal.hidden = true;
+
+          if (!payAtSiteOption.checked) payAtSiteOption.click();
+
+          const paymentGrid = cardOption.closest('.payment-method-grid');
+          if (paymentGrid && !document.querySelector('[data-stripe-checkout-disabled="true"]')) {
+            const notice = document.createElement('p');
+            notice.dataset.stripeCheckoutDisabled = 'true';
+            notice.className = 'payment-warning';
+            notice.textContent = 'Online card checkout is temporarily unavailable. Please select Pay at site.';
+            paymentGrid.insertAdjacentElement('afterend', notice);
+          }
+        };
+
+        const observer = new MutationObserver(applyCheckoutBlock);
+        const startCheckoutBlock = () => {
+          applyCheckoutBlock();
+          observer.observe(document.body, { childList: true, subtree: true });
+        };
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', startCheckoutBlock, { once: true });
+        } else {
+          startCheckoutBlock();
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
