@@ -98,12 +98,27 @@ router.get('/blocked-times', async (_request, response) => {
         reservation.preferred_time_window AS "timeWindow",
         CASE
           WHEN reservation.status = 'reserved' THEN 'Checkout in progress'
-          ELSE 'Appointment request held'
+          WHEN reservation.status = 'held' THEN 'Appointment request held'
+          ELSE 'Confirmed appointment'
         END AS reason,
         'appointment' AS "source"
       FROM appointment_slot_reservations AS reservation
       WHERE reservation.preferred_date >= CURRENT_DATE
-        AND reservation.status IN ('reserved', 'held')
+        AND reservation.status IN ('reserved', 'held', 'confirmed')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM contact_requests AS request
+          WHERE request.id = reservation.contact_request_id
+            AND request.request_type = 'intake'
+            AND request.canceled_at IS NULL
+            AND request.auto_cancelled_at IS NULL
+            AND (
+              request.mrsms_confirmed_at IS NOT NULL
+              OR request.patient_confirmed_at IS NOT NULL
+              OR request.payment_status = 'paid'
+              OR request.status IN ('mrsms_confirmed', 'confirmed', 'completed')
+            )
+        )
       ORDER BY "blockDate" ASC, "timeWindow" ASC
       LIMIT 120
     `);
