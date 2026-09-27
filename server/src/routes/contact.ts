@@ -1583,10 +1583,10 @@ router.post('/staff-decision/:token', async (request, response) => {
     const result = await pool.query<CancellationRow>(
       `UPDATE contact_requests
       SET
-        status = $2,
+        status = $2::VARCHAR(30),
         decision_token_used_at = NOW(),
-        mrsms_confirmed_at = CASE WHEN $2 = 'mrsms_confirmed' THEN NOW() ELSE mrsms_confirmed_at END,
-        canceled_at = CASE WHEN $2 = 'denied' THEN NOW() ELSE canceled_at END,
+        mrsms_confirmed_at = CASE WHEN $2::VARCHAR(30) = 'mrsms_confirmed' THEN NOW() ELSE mrsms_confirmed_at END,
+        canceled_at = CASE WHEN $2::VARCHAR(30) = 'denied' THEN NOW() ELSE canceled_at END,
         updated_at = NOW()
       WHERE mrsms_decision_token = $1
         AND request_type = 'intake'
