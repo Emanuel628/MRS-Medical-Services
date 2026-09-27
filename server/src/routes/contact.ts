@@ -539,12 +539,18 @@ function isUniqueSlotConflict(error: unknown) {
 
 async function expireStaleReservations(queryable: { query: (text: string, params?: unknown[]) => Promise<unknown> }) {
   await queryable.query(`
-    UPDATE appointment_slot_reservations
+    UPDATE appointment_slot_reservations AS reservation
     SET status = 'expired',
       updated_at = NOW()
-    WHERE status = 'reserved'
-      AND expires_at IS NOT NULL
-      AND expires_at <= NOW()
+    FROM contact_requests AS request
+    WHERE reservation.contact_request_id = request.id
+      AND reservation.status = 'reserved'
+      AND reservation.expires_at IS NOT NULL
+      AND reservation.expires_at <= NOW()
+      AND request.payment_status IS DISTINCT FROM 'paid'
+      AND request.mrsms_confirmed_at IS NULL
+      AND request.canceled_at IS NULL
+      AND request.auto_cancelled_at IS NULL
   `);
 }
 
@@ -765,16 +771,22 @@ async function expireCheckoutSessionReservation(session: Stripe.Checkout.Session
        updated_at = NOW()
      WHERE id = $1
        AND request_type = 'intake'
+       AND stripe_checkout_session_id = $2
        AND payment_status <> 'paid'`,
-    [session.client_reference_id],
+    [session.client_reference_id, session.id],
   );
   await pool.query(
-    `UPDATE appointment_slot_reservations
+    `UPDATE appointment_slot_reservations AS reservation
      SET status = 'expired',
        updated_at = NOW()
-     WHERE contact_request_id = $1
-       AND status = 'reserved'`,
-    [session.client_reference_id],
+     FROM contact_requests AS request
+     WHERE reservation.contact_request_id = request.id
+       AND reservation.contact_request_id = $1
+       AND reservation.stripe_checkout_session_id = $2
+       AND reservation.status = 'reserved'
+       AND request.payment_status IS DISTINCT FROM 'paid'
+       AND request.mrsms_confirmed_at IS NULL`,
+    [session.client_reference_id, session.id],
   );
 }
 

@@ -19,12 +19,18 @@ router.get('/blocked-times', async (_request, response) => {
     await ensureScheduleTables();
     await ensureDatabase();
     await pool.query(`
-      UPDATE appointment_slot_reservations
+      UPDATE appointment_slot_reservations AS reservation
       SET status = 'expired',
         updated_at = NOW()
-      WHERE status = 'reserved'
-        AND expires_at IS NOT NULL
-        AND expires_at <= NOW()
+      FROM contact_requests AS request
+      WHERE reservation.contact_request_id = request.id
+        AND reservation.status = 'reserved'
+        AND reservation.expires_at IS NOT NULL
+        AND reservation.expires_at <= NOW()
+        AND request.payment_status IS DISTINCT FROM 'paid'
+        AND request.mrsms_confirmed_at IS NULL
+        AND request.canceled_at IS NULL
+        AND request.auto_cancelled_at IS NULL
     `);
     const result = await pool.query(`
       SELECT
@@ -55,7 +61,7 @@ router.get('/blocked-times', async (_request, response) => {
       FROM contact_requests
       WHERE request_type = 'intake'
         AND preferred_date >= CURRENT_DATE
-        AND mrsms_confirmed_at IS NOT NULL
+        AND (mrsms_confirmed_at IS NOT NULL OR payment_status = 'paid')
         AND canceled_at IS NULL
         AND auto_cancelled_at IS NULL
       UNION ALL
@@ -72,7 +78,6 @@ router.get('/blocked-times', async (_request, response) => {
       WHERE preferred_date >= CURRENT_DATE
         AND status IN ('reserved', 'held', 'confirmed')
       ORDER BY "blockDate" ASC, "timeWindow" ASC
-      LIMIT 120
     `);
 
     response.json({ blockedTimes: result.rows });
